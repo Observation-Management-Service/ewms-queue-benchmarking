@@ -127,7 +127,7 @@ def monitor_jobs(jobs):
                                             logger.info('stderr: %s', line)
                                 outfile = Path(f'{log_base}.{t}.{event.proc}.out')
                                 if outfile.exists():
-                                    with errfile.open() as f:
+                                    with outfile.open() as f:
                                         for line in f:
                                             logger.info('stdout: %s', line)
                             if complete_jobs >= total_jobs:
