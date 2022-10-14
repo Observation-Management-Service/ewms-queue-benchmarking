@@ -19,6 +19,7 @@ jobs:
           _CONDOR_BIND_ALL_INTERFACES: "true"
           _CONDOR_SEC_DEFAULT_AUTHENTICATION_METHODS: "CLAIMTOBE"
           _CONDOR_SEC_CLIENT_AUTHENTICATION_METHODS: "$(SEC_DEFAULT_AUTHENTICATION_METHODS)"
+          _CONDOR_NUM_CPUS: "2"
         ports:
         - 9618:9618
       rabbitmq:
@@ -27,6 +28,7 @@ jobs:
           RABBITMQ_USERNAME: admin
           RABBITMQ_PASSWORD: admin
           RABBITMQ_VHOST: test
+          RABBITMQ_NODE_NAME: rabbit@rabbitmq
         ports:
         - 5672:5672
         - 15672:15672
@@ -50,4 +52,4 @@ jobs:
     - name: Test
       run: |
         cd synthetic/rabbitmq
-        python submit.py --address amqp://admin:admin@localhost/test/channel --scratch $PWD/scratch --loglevel debug
+        python submit.py --address amqp://admin:admin@rabbitmq/test/channel --scratch $PWD/scratch --loglevel debug
