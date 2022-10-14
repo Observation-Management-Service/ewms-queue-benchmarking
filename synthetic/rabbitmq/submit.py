@@ -56,7 +56,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
         '+QUIT': 'false',
         '+MSGS': '0',
         '+DELAY': f'{delay+1}',
-        'arguments': f'python pub.py --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
+        'arguments': f'python pub.py --condor-chirp --num-msgs {args["msgs_per_pub"]} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=pub_job_count)
 
     worker_job_count = max(1, workers//10) if parallel else workers
@@ -72,7 +72,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
         'request_memory': '1GB',
         '+WantIOProxy': 'true', # enable chirp
         '+MSGS': '0',
-        'arguments': f'python worker.py --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
+        'arguments': f'python worker.py --condor-chirp --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=worker_job_count)
 
     return {
