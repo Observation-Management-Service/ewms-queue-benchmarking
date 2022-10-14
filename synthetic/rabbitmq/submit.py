@@ -135,6 +135,7 @@ def monitor_jobs(jobs, total_messages=100):
                                 break
 
                         if event.type == htcondor.JobEventType.ATTRIBUTE_UPDATE:
+                            logging.info('attrs: %r', dict(event.items()))
                             if event.cluster == pub_cluster:
                                 pub_messages[event.proc] = int(event['MSGS'])
                             else:
