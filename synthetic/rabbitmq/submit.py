@@ -1,6 +1,7 @@
 import argparse
 from collections import defaultdict
 import logging
+import os
 from pathlib import Path
 import time
 
@@ -20,7 +21,8 @@ def get_schedd():
         raise RuntimeError('no schedd found!')
     return schedd
 
-def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, delay=0, scratch=Path('/tmp'), **kwargs):
+
+def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, delay=0, scratch=Path('/tmp'), venv=None, **kwargs):
     scratch.mkdir(parents=True, exist_ok=True)
 
     queue_name = f'{pubs}p{workers}w{msg_size}b{delay}s'
@@ -29,14 +31,25 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
     log_pub = f'{log_base}.pub'
     log_worker = f'{log_base}.worker'
 
+    env_script = scratch / 'env.sh'
+    with env_script.open('w') as f:
+        print('#!/bin/sh', file=f)
+        if venv:
+            print(f'. {venv}/bin/activate', file=f)
+        print('exec $@', file=f)
+    env_script.chmod(0o700)
+
     schedd = get_schedd()
 
     pub_job_count = max(1, pubs//10) if parallel else pubs
     pub_jobs = schedd.submit(htcondor.Submit({
-        'executable': 'env.sh',
+        'executable': str(env_script),
         'output': f'{log_pub}.$(ProcId).out',
         'error': f'{log_pub}.$(ProcId).err',
         'log': f'{log_base}.log',
+        'initialdir': os.getcwd(),
+        'transfer_input_files': 'pub.py',
+        'transfer_output_files': '',
         'request_cpus': '1',
         'request_memory': '1GB',
         '+WantIOProxy': 'true', # enable chirp
@@ -48,10 +61,13 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
 
     worker_job_count = max(1, workers//10) if parallel else workers
     worker_jobs = schedd.submit(htcondor.Submit({
-        'executable': 'env.sh',
+        'executable': str(env_script),
         'output': f'{log_worker}.$(ProcId).out',
         'error': f'{log_worker}.$(ProcId).err',
         'log': f'{log_base}.log',
+        'initialdir': os.getcwd(),
+        'transfer_input_files': 'worker.py',
+        'transfer_output_files': '',
         'request_cpus': '1',
         'request_memory': '1GB',
         '+WantIOProxy': 'true', # enable chirp
@@ -67,6 +83,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
         'log': f'{log_base}.log',
     }
 
+
 def monitor_jobs(jobs):
     total_jobs = jobs['pub_job_count'] + jobs['worker_job_count']
     complete_jobs = 0
@@ -78,6 +95,7 @@ def monitor_jobs(jobs):
     worker_messages = defaultdict(int)
 
     quitting = False
+    exit_status = True
 
     schedd = get_schedd()
     jel = htcondor.JobEventLog(jobs['log'])
@@ -94,6 +112,8 @@ def monitor_jobs(jobs):
                                            htcondor.JobEventType.JOB_HELD,
                                            htcondor.JobEventType.CLUSTER_REMOVE }:
                             complete_jobs += 1
+                            if event.type != htcondor.JobEventType.JOB_TERMINATED or not event['TerminatedNormally']:
+                                exit_status = False
                             if complete_jobs >= total_jobs:
                                 logger.info('successfully shut down')
                                 break
@@ -140,13 +160,17 @@ def monitor_jobs(jobs):
         logger.warning('removing jobs')
         schedd.act(htcondor.JobAction.Remove, f'{pub_cluster}')
         schedd.act(htcondor.JobAction.Remove, f'{jobs["worker_jobs"].cluster()}')
-        
+
+    if not exit_status:
+        raise Exception('some jobs failed')
+
 
 def decimal1(s):
     try:
         return int(s)
     except ValueError:
         return f'{s:.1f}'
+
 
 def mkpath(s):
     try:
@@ -155,6 +179,7 @@ def mkpath(s):
     except Exception:
         raise ValueError('invalid path')
     return p
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -165,6 +190,7 @@ def main():
     parser.add_argument('--msg-size', type=int, default=100, help='message size in bytes')
     parser.add_argument('--delay', type=decimal1, default=0, help='delay in seconds')
     parser.add_argument('--scratch', type=mkpath, default='/scratch/dschultz/queue-benchmarks', help='scratch location')
+    parser.add_argument('--venv', default=None, help='(optional) venv location for jobs')
     parser.add_argument('--loglevel', default='info', help='log level')
     args = vars(parser.parse_args())
 
@@ -173,6 +199,7 @@ def main():
 
     job_info = create_jobs(**args)
     monitor_jobs(job_info)
+
 
 if __name__ == '__main__':
     main()
