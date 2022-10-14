@@ -32,7 +32,7 @@ jobs:
     - name: Install HTCondor
       run: |
         curl -fsSL https://get.htcondor.org | sudo /bin/bash -s -- --no-dry-run
-        cat >/etc/condor/config.d/99_custom.conf <<EOF
+        sudo cat >/etc/condor/config.d/99_custom.conf <<EOF
         BIND_ALL_INTERFACES = True
         TOOL_DEBUG = D_FULLDEBUG
         EOF
