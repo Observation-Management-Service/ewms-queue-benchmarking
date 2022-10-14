@@ -156,7 +156,7 @@ def monitor_jobs(jobs, total_messages=100):
                                 if complete_pub_jobs < jobs['pub_job_count']:
                                     schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
                                 if complete_worker_jobs < jobs['worker_job_count']:
-                                    schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
+                                    schedd.edit(f'{worker_cluster}', 'QUIT', 'true', htcondor.TransactionFlags.SetDirty)
 
                             if complete_pub_jobs < jobs['pub_job_count'] and pub_last_update + 10 < time.time(): # rate limit updates
                                 pub_last_update = time.time()
