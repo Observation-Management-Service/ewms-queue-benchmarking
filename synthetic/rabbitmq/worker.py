@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 from functools import partial
 import logging
@@ -11,10 +12,10 @@ from mqclient import Queue
 from htcondor.htchirp import HTChirp
 
 
-async def worker(recv_queue: Queue, delay: float, batch_size: float) -> None:
+async def worker(work_queue: Queue, delay: float, batch_size: float) -> None:
     """Demo example worker."""
     msgs_received = 0
-    async with recv_queue.open_sub() as stream, send_queue.open_pub() as p:
+    async with work_queue.open_sub() as stream:
         async for data in stream:
             uid = data['uuid']
             msg_size = len(data['data'])
@@ -37,7 +38,7 @@ async def main():
     parser = argparse.ArgumentParser(description='Worker')
     parser.add_argument('--parallel', type=int, default=1, help='run workers in parallel, <N> per slot')
     parser.add_argument('--batch-size', type=int, default=100, help='batch size for messages')
-    paresr.add_argument('--delay', type=float, default=.1, help='sleep time for each message processed (to simulate work)')
+    parser.add_argument('--delay', type=float, default=.1, help='sleep time for each message processed (to simulate work)')
     parser.add_argument('--condor-chirp', action='store_true', help='use HTCondor chirp to report msgs and get delay')
     parser.add_argument('address', default='localhost', help='queue address')
     parser.add_argument('queue_name', default='queue', help='queue name')

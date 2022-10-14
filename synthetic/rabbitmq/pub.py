@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 from functools import partial
 import logging
@@ -10,7 +11,7 @@ from uuid import uuid4
 from mqclient import Queue
 from htcondor.htchirp import HTChirp
 
-async def server(work_queue: Queue, msg_size: int = 100, batch_size: int: 100) -> None:
+async def server(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) -> None:
     """Send messages to queue"""
     async with work_queue.open_pub() as p:
         for _ in range(batch_size):
