@@ -1,0 +1,3 @@
+htcondor
+wipac-dev-tools
+wipac-mqclient[rabbitmq]
