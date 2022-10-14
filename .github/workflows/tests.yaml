@@ -49,4 +49,5 @@ jobs:
         pip install wipac-mqclient[rabbitmq]
     - name: Test
       run: |
+        cd synthetic/rabbitmq
         python submit.py --address amqp://admin:admin@localhost/test/channel --scratch $PWD/scratch --loglevel debug
