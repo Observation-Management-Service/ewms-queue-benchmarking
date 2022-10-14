@@ -89,6 +89,7 @@ def monitor_jobs(jobs):
     complete_jobs = 0
 
     pub_cluster = jobs['pub_jobs'].cluster()
+    log_base = jobs['log'].rsplit('.',1)[0]
     pub_delay = 0
     pub_last_update = time.time()
     pub_messages = defaultdict(int)
@@ -114,6 +115,21 @@ def monitor_jobs(jobs):
                             complete_jobs += 1
                             if event.type != htcondor.JobEventType.JOB_TERMINATED or event['ReturnValue'] != 0:
                                 exit_status = False
+                                if event.cluster == pub_cluster:
+                                    t = 'pub'
+                                else:
+                                    t = 'worker'
+                                logger.warning(f'{t} job failed')
+                                errfile = Path(f'{log_base}.{t}.{event.proc}.err')
+                                if errfile.exists():
+                                    with errfile.open() as f:
+                                        for line in f:
+                                            logger.info('stderr:', line)
+                                outfile = Path(f'{log_base}.{t}.{event.proc}.out')
+                                if outfile.exists():
+                                    with errfile.open() as f:
+                                        for line in f:
+                                            logger.info('stdout:', line)
                             if complete_jobs >= total_jobs:
                                 logger.info('successfully shut down')
                                 break
