@@ -46,7 +46,7 @@ jobs:
       id: dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install wipac-mqclient[rabbitmq]
+        pip install wipac-mqclient[rabbitmq] htcondor
     - name: Test
       run: |
         cd synthetic/rabbitmq
