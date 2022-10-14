@@ -141,7 +141,7 @@ def monitor_jobs(jobs, total_messages=100):
                                 worker_messages[event.proc] = int(event['Value'])
                             sent = sum(pub_messages)
                             recv = sum(worker_messages)
-                            logging.info('sent', sent, '| recv', recv)
+                            logging.info(f'sent {sent} | recv {recv}')
 
                             if recv >= total_messages:
                                 logging.info('reached message limit, shutting down')
