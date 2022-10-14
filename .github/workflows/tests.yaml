@@ -32,6 +32,10 @@ jobs:
         ports:
         - 5672:5672
         - 15672:15672
+    env:
+      _CONDOR_SEC_CLAIMTOBE_USER: "submituser"
+      _CONDOR_SEC_DEFAULT_AUTHENTICATION_METHODS: "CLAIMTOBE"
+      _CONDOR_TOOL_DEBUG: "D_FULLDEBUG"
     steps:
     - name: Checkout Project
       uses: actions/checkout@v3
