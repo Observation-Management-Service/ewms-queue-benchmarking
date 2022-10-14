@@ -19,7 +19,9 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
     log_pub = f'{log_base}.pub'
     log_worker = f'{log_base}.worker'
 
-    schedd = htcondor.Schedd()
+    coll_query = htcondor.Collector('localhost').locateAll(htcondor.DaemonTypes.Schedd)
+    for schedd_ad in coll_query:
+        schedd = htcondor.Schedd(schedd_ad)
 
     pub_job_count = max(1, pubs//10) if parallel else pubs
     pub_jobs = schedd.submit(htcondor.Submit({
