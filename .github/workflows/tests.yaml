@@ -40,17 +40,8 @@ jobs:
       run: |
         set -e
         cd synthetic/rabbitmq
-        python pub.py --num-msgs 10 --batch-size 10 amqp://admin:admin@localhost/test testqueue &
-        pid=$!
-        python worker.py --num-msgs 10 --batch-size 10 --delay 0 amqp://admin:admin@localhost/test testqueue
-        if ps | grep "$pid[^[]" >/dev/null
-        then
-          echo "pub.py still running"
-          exit 1
-        else
-          wait $pid
-          exit $?
-        fi
+        python pub.py --num-msgs 10 --batch-size 10 amqp://admin:admin@127.0.0.1/test testqueue
+        python worker.py --num-msgs 10 --batch-size 10 --delay 0 amqp://admin:admin@127.0.0.1/test testqueue
     - name: Install HTCondor
       run: |
         curl -fsSL https://get.htcondor.org | sudo /bin/bash -s -- --no-dry-run
