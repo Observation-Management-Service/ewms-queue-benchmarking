@@ -31,8 +31,7 @@ def worker_wrapper(workq, *args, **kwargs):
 
 def chirp_msgs(msgs: int):
     with HTChirp() as chirp:
-        existing_msgs = chirp.get_job_attr('MSGS')
-        chirp.set_job_attr('MSGS', existing_msgs + msgs)
+        chirp.set_job_attr('MSGS', msgs)
 
 async def main():
     parser = argparse.ArgumentParser(description='Worker')
@@ -41,6 +40,7 @@ async def main():
     parser.add_argument('--delay', type=float, default=.1, help='sleep time for each message processed (to simulate work)')
     parser.add_argument('--condor-chirp', action='store_true', help='use HTCondor chirp to report msgs and get delay')
     parser.add_argument('--num-msgs', type=int, default=0, help='number of messages to publish (default: infinite)')
+    parser.add_argument('--loglevel', default='info', help='log level')
     parser.add_argument('address', default='localhost', help='queue address')
     parser.add_argument('queue_name', default='queue', help='queue name')
     parser.add_argument(
@@ -49,7 +49,7 @@ async def main():
     args = parser.parse_args()
 
     logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
-    logging.basicConfig(level=logging.DEBUG, format=logformat)
+    logging.basicConfig(level=args.loglevel.upper(), format=logformat)
 
     if args.num_msgs and args.num_msgs % args.batch_size != 0:
         raise RuntimeError('num msgs must be a multiple of batch size')
@@ -64,14 +64,15 @@ async def main():
                 p.start()
             for p in processes:
                 p.join()
-            if args.condor_chirp:
-                chirp_msgs(args.batch_size * args.parallel)
             msgs += args.batch_size * args.parallel
         else:
             await worker(workq(), args.delay, args.batch_size)
-            if args.condor_chirp:
-                chirp_msgs(args.batch_size)
             msgs += args.batch_size
+        logging.info('num messages: %d', msgs)
+        if args.condor_chirp:
+            chirp_msgs(msgs)
+
+    logging.info('done working, exiting')
 
 
 if __name__ == '__main__':

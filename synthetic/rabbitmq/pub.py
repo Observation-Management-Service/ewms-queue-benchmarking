@@ -23,21 +23,12 @@ async def server(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) 
 def server_wrapper(workq, *args, **kwargs):
     asyncio.run(server(workq(), *args, **kwargs))
 
-def delay(num_total, chirp=False):
-    msgs = 0 
-    while num_total == 0 or msgs < num_total:
-        if not chirp:
-            yield
-            time.sleep(1)
-        else:
-            with HTChirp() as chirp:
-                msgs = chirp.get_job_attr('MSGS')
-                m = yield
-                msgs += m
-                chirp.set_job_attr('MSGS', msgs)
-                if chirp.get_job_attr('QUIT'):
-                    return
-                time.sleep(chirp.get_job_attr('DELAY'))
+def chirp_msgs(msgs: int):
+    with HTChirp() as chirp:
+        chirp.set_job_attr('MSGS', msgs)
+        if chirp.get_job_attr('QUIT'):
+            raise StopIteration()
+        time.sleep(chirp.get_job_attr('DELAY'))
 
 async def main():
     parser = argparse.ArgumentParser(description='Publisher')
@@ -46,27 +37,35 @@ async def main():
     parser.add_argument('--batch-size', type=int, default=100, help='batch size for messages')
     parser.add_argument('--condor-chirp', action='store_true', help='use HTCondor chirp to report msgs and get delay')
     parser.add_argument('--num-msgs', type=int, default=0, help='number of messages to publish (default: infinite)')
+    parser.add_argument('--loglevel', default='info', help='log level')
     parser.add_argument('address', default='localhost', help='queue address')
     parser.add_argument('queue_name', default='queue', help='queue name')
     args = parser.parse_args()
 
     logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
-    logging.basicConfig(level=logging.DEBUG, format=logformat)
+    logging.basicConfig(level=args.loglevel.upper(), format=logformat)
 
     workq = partial(Queue, 'rabbitmq', address=args.address, name=args.queue_name)
 
-    delay_gen = delay(args.num_msgs, args.condor_chirp)
-    for _ in delay_gen:
-        if args.parallel > 1:
-            processes = [Process(target=server_wrapper, args=(workq, args.msg_size, args.batch_size)) for _ in range(args.parallel)]
-            for p in processes:
-                p.start()
-            for p in processes:
-                p.join()
-            delay_gen.send(args.batch_size * args.parallel)
-        else:
-            await server(workq(), args.msg_size, args.batch_size)
-            delay_gen.send(args.batch_size)
+    try:
+        msgs = 0
+        while args.num_msgs == 0 or msgs < args.num_msgs:
+            if args.parallel > 1:
+                processes = [Process(target=server_wrapper, args=(workq, args.msg_size, args.batch_size)) for _ in range(args.parallel)]
+                for p in processes:
+                    p.start()
+                for p in processes:
+                    p.join()
+                msgs += args.batch_size*args.parallel
+            else:
+                await server(workq(), args.msg_size, args.batch_size)
+                msgs += args.batch_size
+            logging.info('num messages: %d', msgs)
+            if args.condor_chirp:
+                chirp_msgs(msgs)
+    except StopIteration:
+        logging.info('condor QUIT received')
+    logging.info('done publishing, exiting')
 
 if __name__ == '__main__':
     asyncio.run(main())
