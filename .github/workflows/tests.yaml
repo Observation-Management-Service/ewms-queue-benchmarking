@@ -31,14 +31,6 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.9
-    - name: Install HTCondor
-      run: |
-        curl -fsSL https://get.htcondor.org | sudo /bin/bash -s -- --no-dry-run
-        sudo tee /etc/condor/config.d/99_custom.conf >/dev/null <<EOF
-        BIND_ALL_INTERFACES = True
-        TOOL_DEBUG = D_FULLDEBUG
-        EOF
-        condor_q -version
     - name: Install dependencies
       id: dependencies
       run: |
@@ -48,9 +40,9 @@ jobs:
       run: |
         set -e
         cd synthetic/rabbitmq
-        python pub.py --address amqp://admin:admin@localhost/test --num-msgs 10 --batch-size 10 testqueue &
+        python pub.py --num-msgs 10 --batch-size 10 amqp://admin:admin@localhost/test testqueue &
         pid=$!
-        python worker.py --address amqp://admin:admin@localhost/test --num-msgs 10 --batch-size 10 --delay 0 testqueue
+        python worker.py --num-msgs 10 --batch-size 10 --delay 0 amqp://admin:admin@localhost/test testqueue
         if ps | grep "$pid[^[]" >/dev/null
         then
           echo "pub.py still running"
@@ -59,6 +51,14 @@ jobs:
           wait $pid
           exit $?
         fi
+    - name: Install HTCondor
+      run: |
+        curl -fsSL https://get.htcondor.org | sudo /bin/bash -s -- --no-dry-run
+        sudo tee /etc/condor/config.d/99_custom.conf >/dev/null <<EOF
+        BIND_ALL_INTERFACES = True
+        TOOL_DEBUG = D_FULLDEBUG
+        EOF
+        condor_q -version
     - name: Test with HTCondor
       run: |
         cd synthetic/rabbitmq
