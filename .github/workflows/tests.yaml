@@ -48,9 +48,9 @@ jobs:
       run: |
         set -e
         cd synthetic/rabbitmq
-        python pub.py --address amqp://admin:admin@localhost/test/manual --num-msgs 10 --batch-size 10 &
+        python pub.py --address amqp://admin:admin@localhost/test --num-msgs 10 --batch-size 10 testqueue &
         pid=$!
-        python worker.py --address amqp://admin:admin@localhost/test/manual --num-msgs 10 --batch-size 10 --delay 0
+        python worker.py --address amqp://admin:admin@localhost/test --num-msgs 10 --batch-size 10 --delay 0 testqueue
         if ps | grep "$pid[^[]" >/dev/null
         then
           echo "pub.py still running"
@@ -62,4 +62,4 @@ jobs:
     - name: Test with HTCondor
       run: |
         cd synthetic/rabbitmq
-        python submit.py --address amqp://admin:admin@localhost/test/channel --scratch $PWD/scratch --loglevel debug
+        python submit.py --address amqp://admin:admin@localhost/test --scratch $PWD/scratch --loglevel debug
