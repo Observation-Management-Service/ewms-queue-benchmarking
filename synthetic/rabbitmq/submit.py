@@ -85,7 +85,7 @@ def monitor_jobs(jobs):
     try:
         while complete_jobs < total_jobs:
             try:
-                for event in jel.events():
+                for event in jel.events(None):
                     print(event)
 
                     try:
