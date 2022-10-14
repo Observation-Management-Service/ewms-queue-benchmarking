@@ -3,6 +3,7 @@ import asyncio
 from functools import partial
 import logging
 from multiprocessing import Process
+from multiprocessing import Queue as mpQueue
 import random
 import string
 import time
@@ -24,10 +25,12 @@ async def worker(work_queue: Queue, delay: float, batch_size: float) -> None:
             logging.warning(f'complete {uid} with size {msg_size}')
             msgs_received += 1
             if msgs_received >= batch_size:
-                return
+                break
+    return msgs_received
 
-def worker_wrapper(workq, *args, **kwargs):
-    asyncio.run(worker(workq(), *args, **kwargs))
+def worker_wrapper(workq, msg_return, *args, **kwargs):
+    ret = asyncio.run(worker(workq(), *args, **kwargs))
+    msg_return.put(ret)
 
 def chirp_msgs(msgs: int):
     with HTChirp() as chirp:
@@ -59,15 +62,17 @@ async def main():
     msgs = 0
     while args.num_msgs == 0 or msgs < args.num_msgs:
         if args.parallel > 1:
-            processes = [Process(target=worker_wrapper, args=(workq, args.delay, args.batch_size)) for _ in range(args.parallel)]
+            ret = mpQueue()
+            processes = [Process(target=worker_wrapper, args=(workq, ret, args.delay, args.batch_size)) for _ in range(args.parallel)]
             for p in processes:
                 p.start()
             for p in processes:
                 p.join()
-            msgs += args.batch_size * args.parallel
+            while not ret.empty():
+                msgs += ret.get_nowait()
         else:
-            await worker(workq(), args.delay, args.batch_size)
-            msgs += args.batch_size
+            ret = await worker(workq(), args.delay, args.batch_size)
+            msgs += ret
         logging.info('num messages: %d', msgs)
         if args.condor_chirp:
             chirp_msgs(msgs)
