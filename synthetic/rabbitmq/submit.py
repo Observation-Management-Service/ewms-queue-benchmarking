@@ -88,6 +88,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=10
 def monitor_jobs(jobs, total_messages=100):
     total_jobs = jobs['pub_job_count'] + jobs['worker_job_count']
     complete_pub_jobs = 0
+    complete_worker_jobs = 0
     complete_jobs = 0
 
     pub_cluster = jobs['pub_jobs'].cluster()
@@ -118,6 +119,8 @@ def monitor_jobs(jobs, total_messages=100):
                             complete_jobs += 1
                             if event.cluster == pub_cluster:
                                 complete_pub_jobs += 1
+                            else:
+                                complete_worker_jobs += 1
                             if event.type != htcondor.JobEventType.JOB_TERMINATED or event['ReturnValue'] != 0:
                                 exit_status = False
                                 if event.cluster == pub_cluster:
@@ -150,8 +153,10 @@ def monitor_jobs(jobs, total_messages=100):
 
                             if recv >= total_messages:
                                 logging.info('reached message limit, shutting down')
-                                schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
-                                schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
+                                if complete_pub_jobs < jobs['pub_job_count']:
+                                    schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
+                                if complete_worker_jobs < jobs['worker_job_count']:
+                                    schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
 
                             if complete_pub_jobs < jobs['pub_job_count'] and pub_last_update + 10 < time.time(): # rate limit updates
                                 pub_last_update = time.time()
@@ -170,8 +175,10 @@ def monitor_jobs(jobs, total_messages=100):
                     logger.warning('force quit')
                     raise
                 logger.warning('shutting down')
-                schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
-                schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
+                if complete_pub_jobs < jobs['pub_job_count']:
+                    schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
+                if complete_worker_jobs < jobs['worker_job_count']:
+                    schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
                 quitting = True
 
             except Exception as e:
