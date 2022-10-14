@@ -71,6 +71,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=10
         'request_cpus': '1',
         'request_memory': '1GB',
         '+WantIOProxy': 'true', # enable chirp
+        '+QUIT': 'false',
         '+MSGS': '0',
         'arguments': f'python worker.py --condor-chirp --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=worker_job_count)
@@ -85,10 +86,12 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=10
 
 
 def monitor_jobs(jobs, total_messages=100):
-    total_jobs = jobs['pub_job_count']
+    total_jobs = jobs['pub_job_count'] + jobs['worker_job_count']
+    complete_pub_jobs = 0
     complete_jobs = 0
 
     pub_cluster = jobs['pub_jobs'].cluster()
+    worker_cluster = jobs['worker_jobs'].cluster()
     log_base = jobs['log'].rsplit('.',1)[0]
     pub_delay = 0
     pub_last_update = time.time()
@@ -113,6 +116,8 @@ def monitor_jobs(jobs, total_messages=100):
                                            htcondor.JobEventType.JOB_HELD,
                                            htcondor.JobEventType.CLUSTER_REMOVE }:
                             complete_jobs += 1
+                            if event.cluster == pub_cluster:
+                                complete_pub_jobs += 1
                             if event.type != htcondor.JobEventType.JOB_TERMINATED or event['ReturnValue'] != 0:
                                 exit_status = False
                                 if event.cluster == pub_cluster:
@@ -146,8 +151,9 @@ def monitor_jobs(jobs, total_messages=100):
                             if recv >= total_messages:
                                 logging.info('reached message limit, shutting down')
                                 schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
+                                schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
 
-                            if pub_last_update + 10 < time.time(): # rate limit updates
+                            if complete_pub_jobs < jobs['pub_job_count'] and pub_last_update + 10 < time.time(): # rate limit updates
                                 pub_last_update = time.time()
                                 # update the pub DELAY
                                 if recv - sent > jobs['worker_job_count'] * 100:
@@ -165,6 +171,7 @@ def monitor_jobs(jobs, total_messages=100):
                     raise
                 logger.warning('shutting down')
                 schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
+                schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
                 quitting = True
 
             except Exception as e:
@@ -179,7 +186,7 @@ def monitor_jobs(jobs, total_messages=100):
     finally:
         logger.warning('removing jobs')
         schedd.act(htcondor.JobAction.Remove, f'{pub_cluster}')
-        schedd.act(htcondor.JobAction.Remove, f'{jobs["worker_jobs"].cluster()}')
+        schedd.act(htcondor.JobAction.Remove, f'{worker_cluster}')
 
     if not exit_status:
         raise Exception('some jobs failed')

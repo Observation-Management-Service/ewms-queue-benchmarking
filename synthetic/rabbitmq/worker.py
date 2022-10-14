@@ -35,6 +35,8 @@ def worker_wrapper(workq, msg_return, *args, **kwargs):
 def chirp_msgs(msgs: int):
     with HTChirp() as chirp:
         chirp.set_job_attr('MSGS', str(msgs))
+        if strtobool(chirp.get_job_attr('QUIT')):
+            raise StopIteration()
 
 async def main():
     parser = argparse.ArgumentParser(description='Worker')
@@ -60,22 +62,25 @@ async def main():
     workq = partial(Queue, 'rabbitmq', address=args.address, name=args.queue_name)
 
     msgs = 0
-    while args.num_msgs == 0 or msgs < args.num_msgs:
-        if args.parallel > 1:
-            ret = mpQueue()
-            processes = [Process(target=worker_wrapper, args=(workq, ret, args.delay, args.batch_size)) for _ in range(args.parallel)]
-            for p in processes:
-                p.start()
-            for p in processes:
-                p.join()
-            while not ret.empty():
-                msgs += ret.get_nowait()
-        else:
-            ret = await worker(workq(), args.delay, args.batch_size)
-            msgs += ret
-        logging.info('num messages: %d', msgs)
-        if args.condor_chirp:
-            chirp_msgs(msgs)
+    try:
+        while args.num_msgs == 0 or msgs < args.num_msgs:
+            if args.parallel > 1:
+                ret = mpQueue()
+                processes = [Process(target=worker_wrapper, args=(workq, ret, args.delay, args.batch_size)) for _ in range(args.parallel)]
+                for p in processes:
+                    p.start()
+                for p in processes:
+                    p.join()
+                while not ret.empty():
+                    msgs += ret.get_nowait()
+            else:
+                ret = await worker(workq(), args.delay, args.batch_size)
+                msgs += ret
+            logging.info('num messages: %d', msgs)
+            if args.condor_chirp:
+                chirp_msgs(msgs)
+    except StopIteration:
+        logging.info('condor QUIT received')
 
     logging.info('done working, exiting')
 
