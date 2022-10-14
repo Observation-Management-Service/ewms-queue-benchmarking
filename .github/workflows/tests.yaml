@@ -13,22 +13,12 @@ jobs:
     name: "Synthetic Tests with RabbitMQ"
     runs-on: ubuntu-latest
     services:
-      htcondor:
-        image: htcondor/mini:el7
-        env:
-          _CONDOR_BIND_ALL_INTERFACES: "true"
-          _CONDOR_SEC_DEFAULT_AUTHENTICATION_METHODS: "CLAIMTOBE"
-          _CONDOR_SEC_CLIENT_AUTHENTICATION_METHODS: "$(SEC_DEFAULT_AUTHENTICATION_METHODS)"
-          _CONDOR_NUM_CPUS: "2"
-        ports:
-        - 9618:9618
       rabbitmq:
         image: bitnami/rabbitmq:3.8
         env:
           RABBITMQ_USERNAME: admin
           RABBITMQ_PASSWORD: admin
           RABBITMQ_VHOST: test
-          RABBITMQ_NODE_NAME: rabbit@rabbitmq
         ports:
         - 5672:5672
         - 15672:15672
@@ -45,9 +35,11 @@ jobs:
         python-version: 3.9
     - name: Install HTCondor
       run: |
-        curl -fsSL https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-current-Key | sudo apt-key add -
-        sudo sh -c 'echo "deb [arch=amd64] https://research.cs.wisc.edu/htcondor/repo/ubuntu/current focal main\ndeb-src https://research.cs.wisc.edu/htcondor/repo/ubuntu/current focal main" > /etc/apt/sources.list.d/htcondor.list'
-        sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y htcondor
+        sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y curl
+        curl -fsSL https://get.htcondor.org | sudo /bin/bash -s -- --no-dry-run
+        sleep 10
+        condor_status
+        condor_q
     - name: Install dependencies
       id: dependencies
       run: |
@@ -56,4 +48,4 @@ jobs:
     - name: Test
       run: |
         cd synthetic/rabbitmq
-        python submit.py --address amqp://admin:admin@rabbitmq/test/channel --scratch $PWD/scratch --loglevel debug
+        python submit.py --address amqp://admin:admin@localhost/test/channel --scratch $PWD/scratch --loglevel debug
