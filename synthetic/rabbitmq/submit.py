@@ -36,7 +36,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
         print('#!/bin/sh', file=f)
         if venv:
             print(f'. {venv}/bin/activate', file=f)
-        print('exec $@', file=f)
+        print('exec "$@"', file=f)
     env_script.chmod(0o700)
 
     schedd = get_schedd()
