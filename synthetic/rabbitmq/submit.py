@@ -1,4 +1,5 @@
 import argparse
+from collections import defaultdict
 import logging
 from pathlib import Path
 import time
