@@ -1,0 +1,52 @@
+name: ci testing
+
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  synthetic_rabbitmq:
+    name: "Synthetic Tests with RabbitMQ"
+    runs-on: ubuntu-latest
+    services:
+      htcondor:
+        image: htcondor/mini:el7
+        env:
+          _CONDOR_BIND_ALL_INTERFACES: "true"
+          _CONDOR_SEC_DEFAULT_AUTHENTICATION_METHODS: "CLAIMTOBE"
+          _CONDOR_SEC_CLIENT_AUTHENTICATION_METHODS: "$(SEC_DEFAULT_AUTHENTICATION_METHODS)"
+        ports:
+        - 9618:9618
+      rabbitmq:
+        image: bitnami/rabbitmq:3.8
+        env:
+          RABBITMQ_USERNAME: admin
+          RABBITMQ_PASSWORD: admin
+          RABBITMQ_VHOST: test
+        ports:
+        - 5672:5672
+        - 15672:15672
+    steps:
+    - name: Checkout Project
+      uses: actions/checkout@v3
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: Install HTCondor
+      run: |
+        curl -fsSL https://research.cs.wisc.edu/htcondor/repo/keys/HTCondor-current-Key | sudo apt-key add -
+        sudo sh -c 'echo "deb [arch=amd64] https://research.cs.wisc.edu/htcondor/repo/ubuntu/current focal main\ndeb-src https://research.cs.wisc.edu/htcondor/repo/ubuntu/current focal main" > /etc/apt/sources.list.d/htcondor.list'
+        sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y htcondor
+    - name: Install dependencies
+      id: dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install wipac-mqclient[rabbitmq]
+    - name: Test
+      run: |
+        python submit.py --address amqp://admin:admin@localhost/test/channel --scratch $PWD/scratch --loglevel debug
