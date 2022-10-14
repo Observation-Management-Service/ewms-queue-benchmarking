@@ -40,6 +40,7 @@ async def main():
     parser.add_argument('--batch-size', type=int, default=100, help='batch size for messages')
     parser.add_argument('--delay', type=float, default=.1, help='sleep time for each message processed (to simulate work)')
     parser.add_argument('--condor-chirp', action='store_true', help='use HTCondor chirp to report msgs and get delay')
+    parser.add_argument('--num-msgs', type=int, default=0, help='number of messages to publish (default: infinite)')
     parser.add_argument('address', default='localhost', help='queue address')
     parser.add_argument('queue_name', default='queue', help='queue name')
     parser.add_argument(
@@ -50,9 +51,13 @@ async def main():
     logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=logformat)
 
+    if args.num_msgs and args.num_msgs % args.batch_size != 0:
+        raise RuntimeError('num msgs must be a multiple of batch size')
+
     workq = partial(Queue, 'rabbitmq', address=args.address, name=args.queue_name)
 
-    while True:
+    msgs = 0
+    while args.num_msgs == 0 or msgs < args.num_msgs:
         if args.parallel > 1:
             processes = [Process(target=worker_wrapper, args=(workq, args.delay, args.batch_size)) for _ in range(args.parallel)]
             for p in processes:
@@ -61,10 +66,12 @@ async def main():
                 p.join()
             if args.condor_chirp:
                 chirp_msgs(args.batch_size * args.parallel)
+            msgs += args.batch_size * args.parallel
         else:
             worker(workq(), args.delay, args.batch_size)
             if args.condor_chirp:
-                chirp_msgs(args.batch_size * args.parallel)
+                chirp_msgs(args.batch_size)
+            msgs += args.batch_size
 
 
 if __name__ == '__main__':

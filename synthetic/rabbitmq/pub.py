@@ -23,8 +23,9 @@ async def server(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) 
 def server_wrapper(workq, *args, **kwargs):
     asyncio.run(server(workq(), *args, **kwargs))
 
-def delay(chirp):
-    while True:
+def delay(num_total, msgs, chirp):
+    msgs = 0 
+    while num_total == 0 or msgs < num_total:
         if not chirp:
             yield
             time.sleep(1)
@@ -32,7 +33,8 @@ def delay(chirp):
             with HTChirp() as chirp:
                 msgs = chirp.get_job_attr('MSGS')
                 m = yield
-                chirp.set_job_attr('MSGS', msgs + m)
+                msgs += m
+                chirp.set_job_attr('MSGS', msgs)
                 if chirp.get_job_attr('QUIT'):
                     return
                 time.sleep(chirp.get_job_attr('DELAY'))
@@ -43,6 +45,7 @@ async def main():
     parser.add_argument('--msg-size', type=int, default=100, help='message size in bytes')
     parser.add_argument('--batch-size', type=int, default=100, help='batch size for messages')
     parser.add_argument('--condor-chirp', action='store_true', help='use HTCondor chirp to report msgs and get delay')
+    parser.add_argument('--num-msgs', type=int, default=0, help='number of messages to publish (default: infinite)')
     parser.add_argument('address', default='localhost', help='queue address')
     parser.add_argument('queue_name', default='queue', help='queue name')
     args = parser.parse_args()
@@ -52,7 +55,7 @@ async def main():
 
     workq = partial(Queue, 'rabbitmq', address=args.address, name=args.queue_name)
 
-    delay_gen = delay(args.condor_chirp)
+    delay_gen = delay(args.num_msgs, args.condor_chirp)
     for _ in delay_gen:
         if args.parallel > 1:
             processes = [Process(target=server_wrapper, args=(workq, args.msg_size, args.batch_size)) for _ in range(args.parallel)]

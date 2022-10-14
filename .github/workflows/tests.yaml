@@ -44,7 +44,22 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install wipac-mqclient[rabbitmq] htcondor
-    - name: Test
+    - name: Test manually
+      run: |
+        set -e
+        cd synthetic/rabbitmq
+        python pub.py --address amqp://admin:admin@localhost/test/manual --num-msgs 10 --batch-size 10 &
+        pid=$!
+        python worker.py --address amqp://admin:admin@localhost/test/manual --num-msgs 10 --batch-size 10 --delay 0
+        if ps | grep "$pid[^[]" >/dev/null
+        then
+          echo "pub.py still running"
+          exit 1
+        else
+          wait $pid
+          exit $?
+        fi
+    - name: Test with HTCondor
       run: |
         cd synthetic/rabbitmq
         python submit.py --address amqp://admin:admin@localhost/test/channel --scratch $PWD/scratch --loglevel debug
