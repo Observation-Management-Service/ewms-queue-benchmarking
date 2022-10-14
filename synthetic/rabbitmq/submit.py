@@ -19,8 +19,10 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
     log_pub = f'{log_base}.pub'
     log_worker = f'{log_base}.worker'
 
+    schedd = htcondor.Schedd()
+
     pub_job_count = max(1, pubs//10) if parallel else pubs
-    pub_jobs = htcondor.Submit({
+    pub_jobs = schedd.submit(htcondor.Submit({
         'executable': 'env.sh',
         'output': f'{log_pub}.$(ProcId).out',
         'error': f'{log_pub}.$(ProcId).err',
@@ -30,12 +32,12 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
         '+WantIOProxy': 'true', # enable chirp
         '+QUIT': 'false',
         '+MSGS': '0',
-        '+DELAY': f'{delay}',
+        '+DELAY': f'{delay+1}',
         'arguments': f'python pub.py --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
-    }, count=pub_job_count)
+    }), count=pub_job_count)
 
     worker_job_count = max(1, workers//10) if parallel else workers
-    worker_jobs = htcondor.Submit({
+    worker_jobs = schedd.submit(htcondor.Submit({
         'executable': 'env.sh',
         'output': f'{log_worker}.$(ProcId).out',
         'error': f'{log_worker}.$(ProcId).err',
@@ -45,7 +47,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
         '+WantIOProxy': 'true', # enable chirp
         '+MSGS': '0',
         'arguments': f'python worker.py --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
-    }, count=worker_job_count)
+    }), count=worker_job_count)
 
     return {
         'pub_jobs': pub_jobs,
