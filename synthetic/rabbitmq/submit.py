@@ -146,7 +146,7 @@ def mkpath(s):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--address', type=str, help='queue address')
+    parser.add_argument('--address', dest='queue_address', type=str, help='queue address')
     parser.add_argument('--pubs', type=int, default=1, help='# of publishers')
     parser.add_argument('--workers', type=int, default=1, help='# of workers')
     parser.add_argument('--parallel', action='store_true', help='run pubs/workers in parallel, 10x per slot')
