@@ -112,7 +112,7 @@ def monitor_jobs(jobs):
                                            htcondor.JobEventType.JOB_HELD,
                                            htcondor.JobEventType.CLUSTER_REMOVE }:
                             complete_jobs += 1
-                            if event.type != htcondor.JobEventType.JOB_TERMINATED or not event['TerminatedNormally']:
+                            if event.type != htcondor.JobEventType.JOB_TERMINATED or event['ReturnValue'] != 0:
                                 exit_status = False
                             if complete_jobs >= total_jobs:
                                 logger.info('successfully shut down')
