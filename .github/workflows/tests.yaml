@@ -22,10 +22,6 @@ jobs:
         ports:
         - 5672:5672
         - 15672:15672
-    env:
-      _CONDOR_SEC_CLAIMTOBE_USER: "submituser"
-      _CONDOR_SEC_DEFAULT_AUTHENTICATION_METHODS: "CLAIMTOBE"
-      _CONDOR_TOOL_DEBUG: "D_FULLDEBUG"
     steps:
     - name: Checkout Project
       uses: actions/checkout@v3
@@ -35,11 +31,12 @@ jobs:
         python-version: 3.9
     - name: Install HTCondor
       run: |
-        sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y curl
         curl -fsSL https://get.htcondor.org | sudo /bin/bash -s -- --no-dry-run
-        sleep 10
-        condor_status
-        condor_q
+        cat >/etc/condor/config.d/99_custom.conf <<EOF
+        BIND_ALL_INTERFACES = True
+        TOOL_DEBUG = D_FULLDEBUG
+        EOF
+        condor_q -version
     - name: Install dependencies
       id: dependencies
       run: |
