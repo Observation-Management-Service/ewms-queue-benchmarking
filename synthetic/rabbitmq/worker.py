@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from mqclient import Queue
 from htcondor.htchirp import HTChirp
-
+from wipac_dev_tools import strtobool
 
 async def worker(work_queue: Queue, delay: float, batch_size: float) -> None:
     """Demo example worker."""
