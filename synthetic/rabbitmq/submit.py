@@ -84,7 +84,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
     }
 
 
-def monitor_jobs(jobs):
+def monitor_jobs(jobs, total_messages=100):
     total_jobs = jobs['pub_job_count'] + jobs['worker_job_count']
     complete_jobs = 0
 
@@ -142,6 +142,10 @@ def monitor_jobs(jobs):
                             sent = sum(pub_messages)
                             recv = sum(worker_messages)
                             logging.info('sent', sent, '| recv', recv)
+
+                            if recv >= total_messages:
+                                logging.info('reached message limit, shutting down')
+                                schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
 
                             if pub_last_update + 30 < time.time(): # rate limit updates
                                 pub_last_update = time.time()
@@ -202,6 +206,7 @@ def main():
     parser.add_argument('--address', dest='queue_address', type=str, help='queue address')
     parser.add_argument('--pubs', type=int, default=1, help='# of publishers')
     parser.add_argument('--workers', type=int, default=1, help='# of workers')
+    parser.add_argument('--msgs-per-pub', type=int, default=1000, help='# of messages each pub should send')
     parser.add_argument('--parallel', action='store_true', help='run pubs/workers in parallel, 10x per slot')
     parser.add_argument('--msg-size', type=int, default=100, help='message size in bytes')
     parser.add_argument('--delay', type=decimal1, default=0, help='delay in seconds')
@@ -213,8 +218,11 @@ def main():
     logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
     logging.basicConfig(level=args['loglevel'].upper(), format=logformat)
 
+    total = args['msgs_per_pub'] * args['pubs']
+    logging.info(f'goal: {total} messages')
+
     job_info = create_jobs(**args)
-    monitor_jobs(job_info)
+    monitor_jobs(job_info, total)
 
 
 if __name__ == '__main__':
