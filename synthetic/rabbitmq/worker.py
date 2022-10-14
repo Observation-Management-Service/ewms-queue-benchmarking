@@ -68,7 +68,7 @@ async def main():
                 chirp_msgs(args.batch_size * args.parallel)
             msgs += args.batch_size * args.parallel
         else:
-            asyncio.run(worker(workq(), args.delay, args.batch_size))
+            await worker(workq(), args.delay, args.batch_size)
             if args.condor_chirp:
                 chirp_msgs(args.batch_size)
             msgs += args.batch_size

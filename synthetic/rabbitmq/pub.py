@@ -65,7 +65,7 @@ async def main():
                 p.join()
             delay_gen.send(args.batch_size * args.parallel)
         else:
-            asyncio.run(server(workq(), args.msg_size, args.batch_size))
+            await server(workq(), args.msg_size, args.batch_size)
             delay_gen.send(args.batch_size)
 
 if __name__ == '__main__':
