@@ -23,7 +23,7 @@ async def server(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) 
 def server_wrapper(workq, *args, **kwargs):
     asyncio.run(server(workq(), *args, **kwargs))
 
-def delay(num_total, msgs, chirp):
+def delay(num_total, chirp=False):
     msgs = 0 
     while num_total == 0 or msgs < num_total:
         if not chirp:
@@ -65,7 +65,7 @@ async def main():
                 p.join()
             delay_gen.send(args.batch_size * args.parallel)
         else:
-            server(workq(), args.msg_size, args.batch_size)
+            asyncio.run(server(workq(), args.msg_size, args.batch_size))
             delay_gen.send(args.batch_size)
 
 if __name__ == '__main__':
