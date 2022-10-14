@@ -134,12 +134,11 @@ def monitor_jobs(jobs, total_messages=100):
                                 logger.info('successfully shut down')
                                 break
 
-                        if event.type == htcondor.JobEventType.ATTRIBUTE_UPDATE:
-                            logging.info('attrs: %r', dict(event.items()))
+                        if event.type == htcondor.JobEventType.ATTRIBUTE_UPDATE and event['Attribute'] == 'MSGS':
                             if event.cluster == pub_cluster:
-                                pub_messages[event.proc] = int(event['MSGS'])
+                                pub_messages[event.proc] = int(event['Value'])
                             else:
-                                worker_messages[event.proc] = int(event['MSGS'])
+                                worker_messages[event.proc] = int(event['Value'])
                             sent = sum(pub_messages)
                             recv = sum(worker_messages)
                             logging.info('sent', sent, '| recv', recv)
