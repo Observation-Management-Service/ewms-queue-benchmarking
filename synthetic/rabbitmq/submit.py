@@ -136,9 +136,9 @@ def monitor_jobs(jobs, total_messages=100):
 
                         if event.type == htcondor.JobEventType.JOB_AD_INFORMATION:
                             if event.cluster == pub_cluster:
-                                pub_messages[event.proc] = event['MSGS']
+                                pub_messages[event.proc] = int(event['MSGS'])
                             else:
-                                worker_messages[event.proc] = event['MSGS']
+                                worker_messages[event.proc] = int(event['MSGS'])
                             sent = sum(pub_messages)
                             recv = sum(worker_messages)
                             logging.info('sent', sent, '| recv', recv)
@@ -147,7 +147,7 @@ def monitor_jobs(jobs, total_messages=100):
                                 logging.info('reached message limit, shutting down')
                                 schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
 
-                            if pub_last_update + 30 < time.time(): # rate limit updates
+                            if pub_last_update + 10 < time.time(): # rate limit updates
                                 pub_last_update = time.time()
                                 # update the pub DELAY
                                 if recv - sent > jobs['worker_job_count'] * 100:
@@ -206,7 +206,7 @@ def main():
     parser.add_argument('--address', dest='queue_address', type=str, help='queue address')
     parser.add_argument('--pubs', type=int, default=1, help='# of publishers')
     parser.add_argument('--workers', type=int, default=1, help='# of workers')
-    parser.add_argument('--msgs-per-pub', type=int, default=1000, help='# of messages each pub should send')
+    parser.add_argument('--msgs-per-pub', type=int, default=10000, help='# of messages each pub should send')
     parser.add_argument('--parallel', action='store_true', help='run pubs/workers in parallel, 10x per slot')
     parser.add_argument('--msg-size', type=int, default=100, help='message size in bytes')
     parser.add_argument('--delay', type=decimal1, default=0, help='delay in seconds')

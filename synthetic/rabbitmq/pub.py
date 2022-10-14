@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from mqclient import Queue
 from htcondor.htchirp import HTChirp
+from wipac_dev_tools import strtobool
 
 async def server(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) -> None:
     """Send messages to queue"""
@@ -25,10 +26,10 @@ def server_wrapper(workq, *args, **kwargs):
 
 def chirp_msgs(msgs: int):
     with HTChirp() as chirp:
-        chirp.set_job_attr('MSGS', msgs)
-        if chirp.get_job_attr('QUIT'):
+        chirp.set_job_attr('MSGS', str(msgs))
+        if strtobool(chirp.get_job_attr('QUIT')):
             raise StopIteration()
-        time.sleep(chirp.get_job_attr('DELAY'))
+        time.sleep(float(chirp.get_job_attr('DELAY')))
 
 async def main():
     parser = argparse.ArgumentParser(description='Publisher')

@@ -31,7 +31,7 @@ def worker_wrapper(workq, *args, **kwargs):
 
 def chirp_msgs(msgs: int):
     with HTChirp() as chirp:
-        chirp.set_job_attr('MSGS', msgs)
+        chirp.set_job_attr('MSGS', str(msgs))
 
 async def main():
     parser = argparse.ArgumentParser(description='Worker')
