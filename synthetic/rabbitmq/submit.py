@@ -22,7 +22,7 @@ def get_schedd():
     return schedd
 
 
-def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, delay=0, scratch=Path('/tmp'), venv=None, **kwargs):
+def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=1000, msg_size=100, delay=0, scratch=Path('/tmp'), venv=None, **kwargs):
     scratch.mkdir(parents=True, exist_ok=True)
 
     queue_name = f'{pubs}p{workers}w{msg_size}b{delay}s'
@@ -56,7 +56,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
         '+QUIT': 'false',
         '+MSGS': '0',
         '+DELAY': f'{delay+1}',
-        'arguments': f'python pub.py --condor-chirp --num-msgs {args["msgs_per_pub"]} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
+        'arguments': f'python pub.py --condor-chirp --num-msgs {msgs_per_pub} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=pub_job_count)
 
     worker_job_count = max(1, workers//10) if parallel else workers
