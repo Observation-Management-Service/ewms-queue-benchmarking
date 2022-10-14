@@ -11,6 +11,15 @@ import htcondor
 logger = logging.getLogger('submitter')
 
 
+def get_schedd():
+    coll_query = htcondor.Collector('localhost').locateAll(htcondor.DaemonTypes.Schedd)
+    for schedd_ad in coll_query:
+        schedd = htcondor.Schedd(schedd_ad)
+        break
+    else:
+        raise RuntimeError('no schedd found!')
+    return schedd
+
 def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, delay=0, scratch=Path('/tmp'), **kwargs):
     scratch.mkdir(parents=True, exist_ok=True)
 
@@ -20,12 +29,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msg_size=100, d
     log_pub = f'{log_base}.pub'
     log_worker = f'{log_base}.worker'
 
-    coll_query = htcondor.Collector('localhost').locateAll(htcondor.DaemonTypes.Schedd)
-    for schedd_ad in coll_query:
-        schedd = htcondor.Schedd(schedd_ad)
-        break
-    else:
-        raise RuntimeError('no schedd found!')
+    schedd = get_schedd()
 
     pub_job_count = max(1, pubs//10) if parallel else pubs
     pub_jobs = schedd.submit(htcondor.Submit({
@@ -75,7 +79,7 @@ def monitor_jobs(jobs):
 
     quitting = False
 
-    schedd = htcondor.Schedd()
+    schedd = get_schedd()
     jel = htcondor.JobEventLog(jobs['log'])
 
     try:
