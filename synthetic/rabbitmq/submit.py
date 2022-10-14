@@ -85,7 +85,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=10
 
 
 def monitor_jobs(jobs, total_messages=100):
-    total_jobs = jobs['pub_job_count'] + jobs['worker_job_count']
+    total_jobs = jobs['pub_job_count']
     complete_jobs = 0
 
     pub_cluster = jobs['pub_jobs'].cluster()
@@ -139,8 +139,8 @@ def monitor_jobs(jobs, total_messages=100):
                                 pub_messages[event.proc] = int(event['Value'])
                             else:
                                 worker_messages[event.proc] = int(event['Value'])
-                            sent = sum(pub_messages)
-                            recv = sum(worker_messages)
+                            sent = sum(pub_messages.values())
+                            recv = sum(worker_messages.values())
                             logging.info(f'sent {sent} | recv {recv}')
 
                             if recv >= total_messages:
