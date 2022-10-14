@@ -124,12 +124,12 @@ def monitor_jobs(jobs):
                                 if errfile.exists():
                                     with errfile.open() as f:
                                         for line in f:
-                                            logger.info('stderr: %s', line)
+                                            logger.info('stderr: %s', line.rstrip())
                                 outfile = Path(f'{log_base}.{t}.{event.proc}.out')
                                 if outfile.exists():
                                     with outfile.open() as f:
                                         for line in f:
-                                            logger.info('stdout: %s', line)
+                                            logger.info('stdout: %s', line.rstrip())
                             if complete_jobs >= total_jobs:
                                 logger.info('successfully shut down')
                                 break

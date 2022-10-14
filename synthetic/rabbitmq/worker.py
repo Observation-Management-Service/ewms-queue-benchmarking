@@ -38,7 +38,7 @@ async def main():
     parser.add_argument('--parallel', type=int, default=1, help='run workers in parallel, <N> per slot')
     parser.add_argument('--batch-size', type=int, default=100, help='batch size for messages')
     paresr.add_argument('--delay', type=float, default=.1, help='sleep time for each message processed (to simulate work)')
-    parser.add_argument('--condor-chirp', action='store_true', help='use HTCondor chirp to report msgs and get delay'
+    parser.add_argument('--condor-chirp', action='store_true', help='use HTCondor chirp to report msgs and get delay')
     parser.add_argument('address', default='localhost', help='queue address')
     parser.add_argument('queue_name', default='queue', help='queue name')
     parser.add_argument(
