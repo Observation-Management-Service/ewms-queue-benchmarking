@@ -99,6 +99,9 @@ def monitor_jobs(jobs, total_messages=100):
     pub_messages = defaultdict(int)
     worker_messages = defaultdict(int)
 
+    sent = 0
+    recv = 0
+
     quitting = False
     exit_status = True
 
@@ -106,7 +109,7 @@ def monitor_jobs(jobs, total_messages=100):
     jel = htcondor.JobEventLog(jobs['log'])
 
     try:
-        while complete_jobs < total_jobs:
+        while complete_jobs < total_jobs and recv < total_messages:
             try:
                 for event in jel.events(None):
                     print(event)
@@ -169,6 +172,9 @@ def monitor_jobs(jobs, total_messages=100):
                                     schedd.edit(f'{pub_cluster}', 'DELAY', f'{pub_delay}')
                     except Exception:
                         logger.info('event processing error', exc_info=True)
+
+                    if complete_pub_jobs >= jobs['pub_job_count'] and recv >= total_messages:
+                        break
 
             except KeyboardInterrupt:
                 if quitting:
