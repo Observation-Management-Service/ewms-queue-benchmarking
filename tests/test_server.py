@@ -136,7 +136,7 @@ async def test_backoff(server):
     await client.request('POST', '/benchmarks/foo-bar/pubs', {'id': '2'})
     await client.request('PUT', '/benchmarks/foo-bar/pubs/2', {'messages': 5000})
     assert ret['delay'] == 0
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001, 'delay': 0.})
     assert ret['delay'] == 0  # cached result
 
     # update cached values

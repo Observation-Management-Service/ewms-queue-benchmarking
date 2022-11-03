@@ -29,7 +29,7 @@ class MyRestClient:
     def __init__(self, address: str, token: str, queue_name: str):
         self.queue_name = queue_name
         self.uid = uuid4().hex
-        self.delay = 0
+        self.delay = 0.
         self._rc = RestClient(address, token)
         self._rc.request_seq('POST', f'/benchmarks/{queue_name}/pubs', {'id': self.uid, 'delay': self.delay})
 
