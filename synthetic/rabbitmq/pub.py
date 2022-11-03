@@ -20,6 +20,7 @@ async def pub(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) -> 
             await p.send({'uuid': uid, 'data': data})
             logging.warning(f'pub {uid} with size {msg_size}')
 
+
 def pub_wrapper(workq, *args, **kwargs):
     asyncio.run(pub(workq(), *args, **kwargs))
 
@@ -33,7 +34,7 @@ class MyRestClient:
         self._rc.request_seq('POST', f'/benchmarks/{queue_name}/pubs', {'id': self.uid, 'delay': self.delay})
 
     async def send(self, msgs:int):
-        ret = await self._rc.request('PUT', f'/benchmarks/{queue_name}/pubs/{self.uid}', {'messages': msgs, 'delay': self.delay})
+        ret = await self._rc.request('PUT', f'/benchmarks/{self.queue_name}/pubs/{self.uid}', {'messages': msgs, 'delay': self.delay})
         if ret.get('quit'):
             raise StopIteration()
         self.delay = ret.get('delay', self.delay)
@@ -54,7 +55,7 @@ async def main():
     parser.add_argument('queue_name', default='queue', help='queue name')
     args = parser.parse_args()
 
-    logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
+    logformat = '%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
     logging.basicConfig(level=args.loglevel.upper(), format=logformat)
 
     workq = partial(Queue, 'rabbitmq', address=args.address, name=args.queue_name)
@@ -77,7 +78,7 @@ async def main():
                 msgs += args.batch_size
             logging.info('num messages: %d', msgs)
             if rest_client:
-                await send_messages(msgs, args.queue_name, rest_client=rest_client)
+                await rest_client.send(msgs)
     except StopIteration:
         logging.info('QUIT received')
     logging.info('done publishing, exiting')

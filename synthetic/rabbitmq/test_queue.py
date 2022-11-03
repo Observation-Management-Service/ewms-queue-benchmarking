@@ -30,7 +30,6 @@ async def server(work_queue: Queue, result_queue: Queue) -> None:
         assert results[i].strip() == str(i)
 
 
-
 async def worker(recv_queue: Queue, send_queue: Queue) -> None:
     """Demo example worker."""
     async with recv_queue.open_sub() as stream, send_queue.open_pub() as p:
@@ -40,8 +39,10 @@ async def worker(recv_queue: Queue, send_queue: Queue) -> None:
             data['out'] = out.decode('utf-8')
             await p.send(data)
 
+
 def worker_wrapper(workq, resultq):
     asyncio.run(worker(workq(), resultq()))
+
 
 async def main():
     parser = argparse.ArgumentParser(description='Worker')
@@ -57,7 +58,7 @@ async def main():
 
     workq = partial(Queue, 'rabbitmq', address=args.address, name=args.work_queue)
     resultq = partial(Queue, 'rabbitmq', address=args.address, name=args.result_queue, prefetch=args.prefetch)
-    
+
     workq2 = Queue('rabbitmq', address=args.address, name=args.work_queue)
     resultq2 = Queue(
         'rabbitmq', address=args.address, name=args.result_queue, prefetch=args.prefetch

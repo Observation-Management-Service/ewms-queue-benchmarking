@@ -1,13 +1,11 @@
 import argparse
-from collections import defaultdict
 import logging
 import os
 from pathlib import Path
 import time
 
-import classad
 import htcondor
-from rest_tools.client import OpenIDRestClient
+from rest_tools.client import OpenIDRestClient, RestClient
 
 
 logger = logging.getLogger('submitter')
@@ -82,9 +80,6 @@ def create_jobs(queue_address, queue_name, server_address=None, access_token=Non
 
 def monitor_jobs(jobs, total_messages=100, client=None):
     queue_name = jobs['queue_name']
-    total_jobs = jobs['pub_job_count'] + jobs['worker_job_count']
-    complete_jobs = 0
-
     pub_cluster = jobs['pub_jobs'].cluster()
     worker_cluster = jobs['worker_jobs'].cluster()
 
@@ -98,13 +93,14 @@ def monitor_jobs(jobs, total_messages=100, client=None):
                 ret = client.request_seq('GET', f'/benchmarks/{queue_name}')
                 sent = ret['pub-messages']
                 recv = ret['worker-messages']
+                logger.info('sent: %d, recv: %d', sent, recv)
 
                 time.sleep(1)
             except KeyboardInterrupt:
                 logger.warning('shutting down')
                 raise
 
-            except Exception as e:
+            except Exception:
                 logger.info('job/server error', exc_info=True)
 
     finally:
@@ -112,9 +108,6 @@ def monitor_jobs(jobs, total_messages=100, client=None):
         schedd = get_schedd()
         schedd.act(htcondor.JobAction.Remove, f'{pub_cluster}')
         schedd.act(htcondor.JobAction.Remove, f'{worker_cluster}')
-
-    if not exit_status:
-        raise Exception('some jobs failed')
 
 
 def decimal1(s):
@@ -151,7 +144,7 @@ def main():
     parser.add_argument('--loglevel', default='info', help='log level')
     args = vars(parser.parse_args())
 
-    logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
+    logformat = '%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
     logging.basicConfig(level=args['loglevel'].upper(), format=logformat)
 
     total = args['msgs_per_pub'] * args['pubs']

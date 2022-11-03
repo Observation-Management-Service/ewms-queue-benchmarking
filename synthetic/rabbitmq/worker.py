@@ -4,8 +4,6 @@ from functools import partial
 import logging
 from multiprocessing import Process
 from multiprocessing import Queue as mpQueue
-import random
-import string
 from uuid import uuid4
 
 from mqclient import Queue
@@ -27,6 +25,7 @@ async def worker(work_queue: Queue, delay: float, batch_size: float) -> None:
                 break
     return msgs_received
 
+
 def worker_wrapper(workq, msg_return, *args, **kwargs):
     ret = asyncio.run(worker(workq(), *args, **kwargs))
     msg_return.put(ret)
@@ -41,7 +40,7 @@ class MyRestClient:
         self._rc.request_seq('POST', f'/benchmarks/{queue_name}/workers', {'id': self.uid, 'delay': self.delay})
 
     async def send(self, msgs:int):
-        ret = await self._rc.request('PUT', f'/benchmarks/{queue_name}/workers/{self.uid}', {'messages': msgs, 'delay': self.delay})
+        ret = await self._rc.request('PUT', f'/benchmarks/{self.queue_name}/workers/{self.uid}', {'messages': msgs, 'delay': self.delay})
         if ret.get('quit'):
             raise StopIteration()
         self.delay = ret.get('delay', self.delay)
@@ -65,7 +64,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
+    logformat = '%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
     logging.basicConfig(level=args.loglevel.upper(), format=logformat)
 
     if args.num_msgs and args.num_msgs % args.batch_size != 0:

@@ -1,9 +1,7 @@
 """
 Server for queue management
 """
-from contextlib import contextmanager
 from datetime import datetime
-from functools import partial
 import logging
 import os
 import string
@@ -11,7 +9,6 @@ import string
 import elasticsearch
 from elasticsearch import AsyncElasticsearch, Elasticsearch
 from elasticsearch.helpers import async_scan
-from rest_tools.client import RestClient
 from rest_tools.server import RestServer, RestHandler, RestHandlerSetup
 from rest_tools.server.handler import keycloak_role_auth, catch_error
 from tornado.escape import json_decode
