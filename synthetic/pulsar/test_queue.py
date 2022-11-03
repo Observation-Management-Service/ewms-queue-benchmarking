@@ -5,7 +5,7 @@ import subprocess
 from functools import partial
 from multiprocessing import Process
 
-from mqclient_pulsar import Queue
+from mqclient import Queue
 
 
 async def server(work_queue: Queue, result_queue: Queue) -> None:
@@ -62,12 +62,12 @@ async def main():
     if args.auth:
         kwargs['auth_token'] = args.auth
 
-    workq = partial(Queue, name=args.work_queue, **kwargs)
-    resultq = partial(Queue, name=args.result_queue, prefetch=args.prefetch, **kwargs)
+    workq = partial(Queue, 'pulsar', name=args.work_queue, **kwargs)
+    resultq = partial(Queue, 'pulsar', name=args.result_queue, prefetch=args.prefetch, **kwargs)
     
-    workq2 = Queue(name=args.work_queue, **kwargs)
+    workq2 = Queue('pulsar', name=args.work_queue, **kwargs)
     await asyncio.sleep(1)
-    resultq2 = Queue(name=args.result_queue, prefetch=args.prefetch, **kwargs)
+    resultq2 = Queue('pulsar', name=args.result_queue, prefetch=args.prefetch, **kwargs)
 
     f = server(workq2, resultq2)
     p = Process(target=worker_wrapper, args=(workq, resultq))

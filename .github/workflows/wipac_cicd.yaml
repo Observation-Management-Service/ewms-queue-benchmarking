@@ -1,0 +1,177 @@
+name: wipac ci/cd
+
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+
+  flake8:
+    needs: []
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+      - uses: WIPACrepo/wipac-dev-flake8-action@v1
+
+  py-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      - uses: WIPACrepo/wipac-dev-py-setup-action@pip-fix
+
+  py-versions:
+    needs: [py-setup]
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.versions.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: versions
+        uses: WIPACrepo/wipac-dev-py-versions-action@v1
+
+  server-tests:
+    needs: [py-versions]
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.py-versions.outputs.matrix) }}
+    services:
+      elasticsearch:
+        image: bitnami/elasticsearch:7
+        ports:
+        - 9200:9200
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.py3_versions }}
+      - run: |
+          pip install --upgrade pip wheel setuptools
+          pip install .[tests]
+      - name: Run Tests
+        run: |
+          python -m pytest tests --tb=short --log-level=INFO
+
+  synthetic_rabbitmq:
+    name: "Synthetic Tests with RabbitMQ"
+    needs: [py-versions]
+    runs-on: ubuntu-latest
+    services:
+      rabbitmq:
+        image: bitnami/rabbitmq:3.8
+        env:
+          RABBITMQ_USERNAME: admin
+          RABBITMQ_PASSWORD: admin
+          RABBITMQ_VHOST: test
+        options: --health-cmd "rabbitmqctl node_health_check" --health-interval 10s --health-timeout 5s --health-retries 5
+        ports:
+        - 5672:5672
+        - 15672:15672
+      elasticsearch:
+        image: bitnami/elasticsearch:7
+        ports:
+        - 9200:9200
+    env:
+      CI_TEST: "true"
+      PYTHONUNBUFFERED: "1"
+    timeout-minutes: 10
+    steps:
+    - name: Checkout Project
+      uses: actions/checkout@v3
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ fromJSON(needs.py-versions.outputs.matrix).py3_versions[0] }}
+    - name: Install dependencies
+      id: dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install .[tests]
+        pip install -r synthetic/rabbitmq/requirements.txt
+    - name: Test manually
+      run: |
+        set -e
+        cd synthetic/rabbitmq
+        python pub.py --num-msgs 10 --batch-size 10 amqp://admin:admin@localhost/test testqueue
+        python worker.py --num-msgs 10 --batch-size 10 --delay 0 amqp://admin:admin@localhost/test testqueue
+    - name: Install HTCondor
+      run: |
+        curl -fsSL https://get.htcondor.org | sudo /bin/bash -s -- --no-dry-run
+        sudo tee /etc/condor/config.d/99_custom.conf >/dev/null <<EOF
+        # python bindings need this to find the schedd
+        BIND_ALL_INTERFACES = True
+        # inherit actions Python environment
+        STARTER_JOB_ENVIRONMENT = "PATH=${PATH} LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+        EOF
+        condor_reconfig
+        condor_q -version
+    - name: Start server
+      run: |
+        python -m benchmark_server &
+    - uses: ifaxity/wait-on-action
+      with:
+        resource: http-get://localhost:8080/healthz
+    - name: Test with HTCondor
+      run: |
+        cd synthetic/rabbitmq
+        python submit.py --server http://localhost:8080 --msgs-per-pub 10000 --address amqp://admin:admin@localhost/test --scratch $PWD/scratch
+
+  release:
+    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+    needs: [server-tests, synthetic_rabbitmq]
+    runs-on: ubuntu-latest
+    concurrency: release
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+    - name: Python Semantic Release
+      uses: relekang/python-semantic-release@master
+      with:
+        github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        # DOES NOT GO TO PYPI
+        #repository_username: __token__
+        #repository_password: ${{ secrets.PYPI_TOKEN }}
+
+  docker:
+    name: "Docker Image"
+    needs: [server-tests, synthetic_rabbitmq]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Project
+      uses: actions/checkout@v3
+    - name: Docker meta
+      id: docker_meta
+      uses: docker/metadata-action@v3
+      with:
+        images: |
+          ghcr.io/observation-management-service/ewms-queue-benchmarking
+        tags: |
+            type=ref,event=branch
+            type=semver,pattern={{major}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v1
+      if: ${{ github.event_name != 'pull_request' }}
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Push Docker Image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.docker_meta.outputs.tags }}
+        labels: ${{ steps.docker_meta.outputs.labels }}

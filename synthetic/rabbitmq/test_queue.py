@@ -55,8 +55,8 @@ async def main():
 
     logging.basicConfig(level=logging.INFO)
 
-    workq = partial(Queue, address=args.address, name=args.work_queue)
-    resultq = partial(Queue, address=args.address, name=args.result_queue, prefetch=args.prefetch)
+    workq = partial(Queue, 'rabbitmq', address=args.address, name=args.work_queue)
+    resultq = partial(Queue, 'rabbitmq', address=args.address, name=args.result_queue, prefetch=args.prefetch)
     
     workq2 = Queue('rabbitmq', address=args.address, name=args.work_queue)
     resultq2 = Queue(

@@ -1,3 +1,4 @@
 htcondor
 wipac-dev-tools
+wipac-rest-tools
 wipac-mqclient[rabbitmq]
