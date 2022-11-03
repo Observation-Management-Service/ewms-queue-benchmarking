@@ -22,7 +22,7 @@ def get_schedd():
     return schedd
 
 
-def create_jobs(queue_address, queue_name, server_address=None, access_token=None, pubs=1, workers=1, parallel=True, msgs_per_pub=1000, msg_size=100, delay=0, scratch=Path('/tmp'), venv=None, **kwargs):
+def create_jobs(queue_address, queue_name, server=None, access_token=None, pubs=1, workers=1, parallel=True, msgs_per_pub=1000, msg_size=100, delay=0, scratch=Path('/tmp'), venv=None, **kwargs):
     scratch.mkdir(parents=True, exist_ok=True)
 
     access = f'--server-access-token {access_token}' if access_token else ''
@@ -52,7 +52,7 @@ def create_jobs(queue_address, queue_name, server_address=None, access_token=Non
         'transfer_output_files': '',
         'request_cpus': '1',
         'request_memory': '1GB',
-        'arguments': f'python pub.py --server-address {server_address} {access} --num-msgs {msgs_per_pub} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
+        'arguments': f'python pub.py --server-address {server} {access} --num-msgs {msgs_per_pub} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=pub_job_count)
 
     worker_job_count = max(1, workers//10) if parallel else workers
@@ -66,7 +66,7 @@ def create_jobs(queue_address, queue_name, server_address=None, access_token=Non
         'transfer_output_files': '',
         'request_cpus': '1',
         'request_memory': '1GB',
-        'arguments': f'python worker.py --server-address {server_address} {access} --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
+        'arguments': f'python worker.py --server-address {server} {access} --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=worker_job_count)
 
     return {
