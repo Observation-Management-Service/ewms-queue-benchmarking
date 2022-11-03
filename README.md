@@ -1,2 +1,5 @@
+<!--- Top of README Badges (automated) --->
+[![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/Observation-Management-Service/ewms-queue-benchmarking?include_prereleases)](https://github.com/Observation-Management-Service/ewms-queue-benchmarking/) [![Lines of code](https://img.shields.io/tokei/lines/github/Observation-Management-Service/ewms-queue-benchmarking)](https://github.com/Observation-Management-Service/ewms-queue-benchmarking/) [![GitHub issues](https://img.shields.io/github/issues/Observation-Management-Service/ewms-queue-benchmarking)](https://github.com/Observation-Management-Service/ewms-queue-benchmarking/issues?q=is%3Aissue+sort%3Aupdated-desc+is%3Aopen) [![GitHub pull requests](https://img.shields.io/github/issues-pr/Observation-Management-Service/ewms-queue-benchmarking)](https://github.com/Observation-Management-Service/ewms-queue-benchmarking/pulls?q=is%3Apr+sort%3Aupdated-desc+is%3Aopen) 
+<!--- End of README Badges (automated) --->
 # ewms-queue-benchmarking
 Benchmarking possible EWMS queues

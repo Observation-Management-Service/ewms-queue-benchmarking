@@ -1,12 +1,12 @@
 import argparse
-from collections import defaultdict
+from glob import glob
 import logging
 import os
 from pathlib import Path
 import time
 
-import classad
 import htcondor
+from rest_tools.client import OpenIDRestClient, RestClient
 
 
 logger = logging.getLogger('submitter')
@@ -22,10 +22,10 @@ def get_schedd():
     return schedd
 
 
-def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=1000, msg_size=100, delay=0, scratch=Path('/tmp'), venv=None, **kwargs):
+def create_jobs(queue_address, queue_name, server=None, access_token=None, pubs=1, workers=1, parallel=True, msgs_per_pub=1000, msg_size=100, delay=0, scratch=Path('/tmp'), venv=None, **kwargs):
     scratch.mkdir(parents=True, exist_ok=True)
 
-    queue_name = f'{pubs}p{workers}w{msg_size}b{delay}s'
+    access = f'--server-access-token {access_token}' if access_token else ''
 
     log_base = scratch / queue_name
     log_pub = f'{log_base}.pub'
@@ -52,11 +52,7 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=10
         'transfer_output_files': '',
         'request_cpus': '1',
         'request_memory': '1GB',
-        '+WantIOProxy': 'true', # enable chirp
-        '+QUIT': 'false',
-        '+MSGS': '0',
-        '+DELAY': f'{delay+1}',
-        'arguments': f'python pub.py --condor-chirp --num-msgs {msgs_per_pub} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
+        'arguments': f'python pub.py --server-address {server} {access} --num-msgs {msgs_per_pub} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=pub_job_count)
 
     worker_job_count = max(1, workers//10) if parallel else workers
@@ -70,13 +66,11 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=10
         'transfer_output_files': '',
         'request_cpus': '1',
         'request_memory': '1GB',
-        '+WantIOProxy': 'true', # enable chirp
-        '+QUIT': 'false',
-        '+MSGS': '0',
-        'arguments': f'python worker.py --condor-chirp --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
+        'arguments': f'python worker.py --server-address {server} {access} --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=worker_job_count)
 
     return {
+        'queue_name': queue_name,
         'pub_jobs': pub_jobs,
         'pub_job_count': pub_job_count,
         'worker_jobs': worker_jobs,
@@ -85,124 +79,43 @@ def create_jobs(queue_address, pubs=1, workers=1, parallel=True, msgs_per_pub=10
     }
 
 
-def monitor_jobs(jobs, total_messages=100):
-    total_jobs = jobs['pub_job_count'] + jobs['worker_job_count']
-    complete_pub_jobs = 0
-    complete_worker_jobs = 0
-    complete_jobs = 0
-
+def monitor_jobs(jobs, total_messages=100, time_limit=-1, client=None):
+    queue_name = jobs['queue_name']
     pub_cluster = jobs['pub_jobs'].cluster()
     worker_cluster = jobs['worker_jobs'].cluster()
-    log_base = jobs['log'].rsplit('.',1)[0]
-    pub_delay = 0
-    pub_last_update = time.time()
-    pub_messages = defaultdict(int)
-    worker_messages = defaultdict(int)
 
     sent = 0
     recv = 0
 
-    quitting = False
-    exit_status = True
-
-    schedd = get_schedd()
-    jel = htcondor.JobEventLog(jobs['log'])
-
+    start = time.time()
     try:
-        while complete_jobs < total_jobs and recv < total_messages:
+        while recv < total_messages and (time_limit == -1 or time.time()-start < time_limit):
             try:
-                for event in jel.events(None):
-                    print(event)
+                # get status update
+                ret = client.request_seq('GET', f'/benchmarks/{queue_name}')
+                sent = ret['pub-messages']
+                recv = ret['worker-messages']
+                logger.info('sent: %d, recv: %d', sent, recv)
 
-                    try:
-                        if event.type in { htcondor.JobEventType.JOB_TERMINATED,
-                                           htcondor.JobEventType.JOB_ABORTED,
-                                           htcondor.JobEventType.JOB_HELD,
-                                           htcondor.JobEventType.CLUSTER_REMOVE }:
-                            complete_jobs += 1
-                            if event.cluster == pub_cluster:
-                                complete_pub_jobs += 1
-                            else:
-                                complete_worker_jobs += 1
-                            if event.type != htcondor.JobEventType.JOB_TERMINATED or event['ReturnValue'] != 0:
-                                exit_status = False
-                                if event.cluster == pub_cluster:
-                                    t = 'pub'
-                                else:
-                                    t = 'worker'
-                                logger.warning(f'{t} job failed')
-                                errfile = Path(f'{log_base}.{t}.{event.proc}.err')
-                                if errfile.exists():
-                                    with errfile.open() as f:
-                                        for line in f:
-                                            logger.info('stderr: %s', line.rstrip())
-                                outfile = Path(f'{log_base}.{t}.{event.proc}.out')
-                                if outfile.exists():
-                                    with outfile.open() as f:
-                                        for line in f:
-                                            logger.info('stdout: %s', line.rstrip())
-                            if complete_jobs >= total_jobs:
-                                logger.info('successfully shut down')
-                                break
-
-                        if event.type == htcondor.JobEventType.ATTRIBUTE_UPDATE and event['Attribute'] == 'MSGS':
-                            if event.cluster == pub_cluster:
-                                pub_messages[event.proc] = int(event['Value'])
-                            else:
-                                worker_messages[event.proc] = int(event['Value'])
-                            sent = sum(pub_messages.values())
-                            recv = sum(worker_messages.values())
-                            logging.info(f'sent {sent} | recv {recv}')
-
-                            if recv >= total_messages:
-                                logging.info('reached message limit, shutting down')
-                                if complete_pub_jobs < jobs['pub_job_count']:
-                                    schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
-                                if complete_worker_jobs < jobs['worker_job_count']:
-                                    schedd.edit(f'{worker_cluster}', 'QUIT', 'true', htcondor.TransactionFlags.SetDirty)
-
-                            if complete_pub_jobs < jobs['pub_job_count'] and pub_last_update + 10 < time.time(): # rate limit updates
-                                pub_last_update = time.time()
-                                # update the pub DELAY
-                                if recv - sent > jobs['worker_job_count'] * 100:
-                                    pub_delay = pub_delay * 2 + 1
-                                    schedd.edit(f'{pub_cluster}', 'DELAY', f'{pub_delay}')
-                                elif recv - sent < jobs['worker_job_count'] * 5:
-                                    pub_delay -= 1
-                                    schedd.edit(f'{pub_cluster}', 'DELAY', f'{pub_delay}')
-                    except Exception:
-                        logger.info('event processing error', exc_info=True)
-
-                    if complete_pub_jobs >= jobs['pub_job_count'] and recv >= total_messages:
-                        break
-
+                time.sleep(1)
             except KeyboardInterrupt:
-                if quitting:
-                    logger.warning('force quit')
-                    raise
                 logger.warning('shutting down')
-                if complete_pub_jobs < jobs['pub_job_count']:
-                    schedd.edit(f'{pub_cluster}', 'QUIT', 'true')
-                if complete_worker_jobs < jobs['worker_job_count']:
-                    schedd.edit(f'{worker_cluster}', 'QUIT', 'true')
-                quitting = True
+                raise
 
-            except Exception as e:
-                logger.info('job event log error', exc_info=True)
-                try:
-                    jel.close()
-                    jel = htcondor.JobEventLog(jobs['log'])
-                except Exception:
-                    logger.warning('cannot reopen event log', exc_info=True)
-                    raise e
+            except Exception:
+                logger.info('job/server error', exc_info=True)
 
     finally:
         logger.warning('removing jobs')
+        schedd = get_schedd()
         schedd.act(htcondor.JobAction.Remove, f'{pub_cluster}')
         schedd.act(htcondor.JobAction.Remove, f'{worker_cluster}')
 
-    if not exit_status:
-        raise Exception('some jobs failed')
+    if time_limit != -1 and time.time()-start >= time_limit:
+        if logger.isEnabledFor(logging.DEBUG):
+            for name in sorted(glob(jobs['log'].rsplit('.',1)[0]+'*')):
+                logger.debug('filename %s\n%s', name, open(name).read())
+        raise Exception('hit time limit')
 
 
 def decimal1(s):
@@ -223,7 +136,11 @@ def mkpath(s):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--address', dest='queue_address', type=str, help='queue address')
+    parser.add_argument('--queue-address', help='queue address')
+    parser.add_argument('--server', help='benchmark server address')
+    parser.add_argument('--auth-url', help='OpenID url')
+    parser.add_argument('--auth-client-id', help='OpenID client id')
+    parser.add_argument('--auth-client-secret', help='OpenID client secret')
     parser.add_argument('--pubs', type=int, default=1, help='# of publishers')
     parser.add_argument('--workers', type=int, default=1, help='# of workers')
     parser.add_argument('--msgs-per-pub', type=int, default=10000, help='# of messages each pub should send')
@@ -231,18 +148,49 @@ def main():
     parser.add_argument('--msg-size', type=int, default=100, help='message size in bytes')
     parser.add_argument('--delay', type=decimal1, default=0, help='delay in seconds')
     parser.add_argument('--scratch', type=mkpath, default='/scratch/dschultz/queue-benchmarks', help='scratch location')
-    parser.add_argument('--venv', default=None, help='(optional) venv location for jobs')
+    parser.add_argument('--venv', help='(optional) venv location for jobs')
+    parser.add_argument('--time-limit', type=int, default=-1, help='(optional) time limit before killing jobs')
     parser.add_argument('--loglevel', default='info', help='log level')
     args = vars(parser.parse_args())
 
-    logformat='%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
+    logformat = '%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(message)s'
     logging.basicConfig(level=args['loglevel'].upper(), format=logformat)
 
     total = args['msgs_per_pub'] * args['pubs']
     logging.info(f'goal: {total} messages')
 
+    pubs = args['pubs']
+    workers = args['workers']
+    msg_size = args['msg_size']
+    delay = args['delay']
+    queue_name = f'rabbitmq-p{pubs}-w{workers}-m{msg_size}-d{delay}'
+    logging.info(f'Creating benchmark {queue_name}')
+    args['queue_name'] = queue_name
+
+    if args['auth_url']:
+        client = OpenIDRestClient(
+            args['server'],
+            args['auth_url'],
+            args['auth_client_id'],
+            args['auth_client_secret'],
+        )
+        args['access_token'] = client.access_token
+    else:
+        logging.warning('Running without auth!')
+        client = RestClient(args['server'])
+
+    client.request_seq('POST', '/benchmarks', {
+        'name': queue_name,
+        'pubs': pubs,
+        'workers': workers,
+        'messages-per-pub': args['msgs_per_pub'],
+        'messages-size': msg_size,
+        'delay': delay,
+        'expected-messages': total,
+    })
+
     job_info = create_jobs(**args)
-    monitor_jobs(job_info, total)
+    monitor_jobs(job_info, total, args['time_limit'], client=client)
 
 
 if __name__ == '__main__':
