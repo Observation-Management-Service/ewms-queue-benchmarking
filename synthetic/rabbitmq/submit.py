@@ -89,7 +89,7 @@ def monitor_jobs(jobs, total_messages=100, time_limit=-1, client=None):
 
     start = time.time()
     try:
-        while recv < total_messages and (time_limit == -1 or time.time()-start > time_limit):
+        while recv < total_messages and (time_limit == -1 or time.time()-start < time_limit):
             try:
                 # get status update
                 ret = client.request_seq('GET', f'/benchmarks/{queue_name}')
@@ -111,10 +111,11 @@ def monitor_jobs(jobs, total_messages=100, time_limit=-1, client=None):
         schedd.act(htcondor.JobAction.Remove, f'{pub_cluster}')
         schedd.act(htcondor.JobAction.Remove, f'{worker_cluster}')
 
-    if time_limit > 0 and time.time()-start > time_limit and logger.isEnabledFor(logging.DEBUG):
-        for name in sorted(glob(jobs['log'].rsplit('.',1)+'*')):
-            logger.debug('filename %s\n%s', name, open(name).read())
-
+    if time_limit != -1 and time.time()-start >= time_limit:
+        if logger.isEnabledFor(logging.DEBUG):
+            for name in sorted(glob(jobs['log'].rsplit('.',1)+'*')):
+                logger.debug('filename %s\n%s', name, open(name).read())
+        raise Exception('hit time limit')
 
 def decimal1(s):
     try:
