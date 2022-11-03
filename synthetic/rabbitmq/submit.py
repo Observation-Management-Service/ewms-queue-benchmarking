@@ -158,17 +158,17 @@ def main():
     logging.info(f'Creating benchmark {queue_name}')
     args['queue_name'] = queue_name
 
-    if args.auth_url:
+    if args['auth_url']:
         client = OpenIDRestClient(
-            args.server,
-            args.auth_url,
-            args.auth_client_id,
-            args.auth_client_secret,
+            args['server'],
+            args['auth_url'],
+            args['auth_client_id'],
+            args['auth_client_secret'],
         )
         args['access_token'] = client.access_token
     else:
         logging.warning('Running without auth!')
-        client = RestClient(args.server)
+        client = RestClient(args['server'])
 
     client.request_seq('POST', '/benchmarks', {
         'name': queue_name,
