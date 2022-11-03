@@ -50,6 +50,9 @@ jobs:
         ports:
         - 9200:9200
         options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      CI_TEST: "true"
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v3
@@ -81,6 +84,7 @@ jobs:
         image: bitnami/elasticsearch:7
         ports:
         - 9200:9200
+        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       CI_TEST: "true"
       PYTHONUNBUFFERED: "1"
