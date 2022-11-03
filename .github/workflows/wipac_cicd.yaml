@@ -117,7 +117,8 @@ jobs:
     - name: Start server
       run: |
         python -m benchmark_server &
-    - uses: ifaxity/wait-on-action
+    - name: Wait for server
+      uses: ifaxity/wait-on-action@v1
       with:
         resource: http-get://localhost:8080/healthz
     - name: Test with HTCondor
