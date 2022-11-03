@@ -49,7 +49,7 @@ jobs:
         image: bitnami/elasticsearch:7
         ports:
         - 9200:9200
-        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 10s --health-timeout 5s --health-retries 5
+        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 5
     env:
       CI_TEST: "true"
       PYTHONUNBUFFERED: "1"
@@ -76,7 +76,7 @@ jobs:
           RABBITMQ_USERNAME: admin
           RABBITMQ_PASSWORD: admin
           RABBITMQ_VHOST: test
-        options: --health-cmd "rabbitmqctl node_health_check" --health-interval 10s --health-timeout 5s --health-retries 5
+        options: --health-cmd "rabbitmqctl node_health_check" --health-interval 5s --health-timeout 5s --health-retries 5
         ports:
         - 5672:5672
         - 15672:15672
@@ -84,7 +84,7 @@ jobs:
         image: bitnami/elasticsearch:7
         ports:
         - 9200:9200
-        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 10s --health-timeout 5s --health-retries 5
+        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 5
     env:
       CI_TEST: "true"
       PYTHONUNBUFFERED: "1"
@@ -129,7 +129,7 @@ jobs:
     - name: Test with HTCondor
       run: |
         cd synthetic/rabbitmq
-        python submit.py --server http://localhost:8080 --msgs-per-pub 10000 --address amqp://admin:admin@localhost/test --scratch $PWD/scratch
+        python submit.py --server http://localhost:8080 --msgs-per-pub 10000 --queue-address amqp://admin:admin@localhost/test --scratch $PWD/scratch
 
   release:
     if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}

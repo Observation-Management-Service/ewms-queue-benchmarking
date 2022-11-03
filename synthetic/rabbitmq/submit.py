@@ -130,7 +130,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--queue-address', help='queue address')
     parser.add_argument('--server', help='benchmark server address')
-    parser.add_argument('--auth-url', default=None, help='OpenID url')
+    parser.add_argument('--auth-url', help='OpenID url')
     parser.add_argument('--auth-client-id', help='OpenID client id')
     parser.add_argument('--auth-client-secret', help='OpenID client secret')
     parser.add_argument('--pubs', type=int, default=1, help='# of publishers')
@@ -158,7 +158,7 @@ def main():
     logging.info(f'Creating benchmark {queue_name}')
     args['queue_name'] = queue_name
 
-    if args.auth_client_id:
+    if args.auth_url:
         client = OpenIDRestClient(
             args.server,
             args.auth_url,
@@ -167,6 +167,7 @@ def main():
         )
         args['access_token'] = client.access_token
     else:
+        logging.warning('Running without auth!')
         client = RestClient(args.server)
 
     client.request_seq('POST', '/benchmarks', {
