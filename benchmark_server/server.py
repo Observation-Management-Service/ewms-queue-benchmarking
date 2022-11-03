@@ -149,19 +149,19 @@ class Pubs(APIBase):
         extra_pub_msgs = ret['pub-messages']-ret['worker-messages']
         if extra_pub_msgs > 100000:
             logging.info(f'{benchmark} {pub_id} - 100k messages extra, hard backoff')
-            delay += 100
+            delay += 100.
         elif ret['expected-messages'] > 0 and extra_pub_msgs * 100. / max(1, ret['expected-messages']) > 10:
             logging.info(f'{benchmark} {pub_id} - 10% of total messages are buffered, backoff')
-            delay = delay * 2 + 1
+            delay = delay * 2 + 1.
         elif extra_pub_msgs > 10000:
             logging.info(f'{benchmark} {pub_id} - 10k messages extra, slow backoff')
-            delay += 1
+            delay += 1.
         elif extra_pub_msgs < 1000:
             logging.info(f'{benchmark} {pub_id} - need to queue now, no delay')
-            delay = 0
+            delay = 0.
         elif extra_pub_msgs < 10000:
             logging.info(f'{benchmark} {pub_id} - shrink delay')
-            delay = max(0, delay / 2 - 1)
+            delay = max(0., delay / 2 - 1)
 
         doc = {
             'id': pub_id,
