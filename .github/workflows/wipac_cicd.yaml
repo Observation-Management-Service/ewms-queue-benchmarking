@@ -76,7 +76,7 @@ jobs:
           RABBITMQ_USERNAME: admin
           RABBITMQ_PASSWORD: admin
           RABBITMQ_VHOST: test
-        options: --health-cmd "rabbitmqctl node_health_check" --health-interval 5s --health-timeout 5s --health-retries 5
+        options: --health-cmd "rabbitmqctl node_health_check" --health-interval 5s --health-timeout 5s --health-retries 10
         ports:
         - 5672:5672
         - 15672:15672
@@ -84,7 +84,7 @@ jobs:
         image: bitnami/elasticsearch:7
         ports:
         - 9200:9200
-        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 5
+        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       CI_TEST: "true"
       PYTHONUNBUFFERED: "1"
