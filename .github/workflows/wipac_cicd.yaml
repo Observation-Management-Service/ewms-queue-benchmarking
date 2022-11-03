@@ -119,17 +119,14 @@ jobs:
         EOF
         condor_reconfig
         condor_q -version
-    - name: Start server
-      run: |
-        python -m benchmark_server &
-    - name: Wait for server
-      uses: ifaxity/wait-on-action@v1
-      with:
-        resource: http-get://localhost:8080/healthz
     - name: Test with HTCondor
       run: |
+        python -m benchmark_server &
+        sleep 1
         cd synthetic/rabbitmq
-        python submit.py --server http://localhost:8080 --msgs-per-pub 10000 --queue-address amqp://admin:admin@localhost/test --scratch $PWD/scratch
+        python submit.py --server http://localhost:8080 --msgs-per-pub 10000 \
+            --queue-address amqp://admin:admin@localhost/test --scratch $PWD/scratch \
+            --time-limit 300 --loglevel debug
 
   release:
     if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}

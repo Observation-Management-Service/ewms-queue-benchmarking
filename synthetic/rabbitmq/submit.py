@@ -1,4 +1,5 @@
 import argparse
+from glob import glob
 import logging
 import os
 from pathlib import Path
@@ -78,7 +79,7 @@ def create_jobs(queue_address, queue_name, server_address=None, access_token=Non
     }
 
 
-def monitor_jobs(jobs, total_messages=100, client=None):
+def monitor_jobs(jobs, total_messages=100, time_limit=-1, client=None):
     queue_name = jobs['queue_name']
     pub_cluster = jobs['pub_jobs'].cluster()
     worker_cluster = jobs['worker_jobs'].cluster()
@@ -86,8 +87,9 @@ def monitor_jobs(jobs, total_messages=100, client=None):
     sent = 0
     recv = 0
 
+    start = time.time()
     try:
-        while recv < total_messages:
+        while recv < total_messages and (time_limit == -1 or time.time()-start > time_limit):
             try:
                 # get status update
                 ret = client.request_seq('GET', f'/benchmarks/{queue_name}')
@@ -108,6 +110,10 @@ def monitor_jobs(jobs, total_messages=100, client=None):
         schedd = get_schedd()
         schedd.act(htcondor.JobAction.Remove, f'{pub_cluster}')
         schedd.act(htcondor.JobAction.Remove, f'{worker_cluster}')
+
+    if time_limit > 0 and time.time()-start > time_limit and logger.isEnabledFor(logging.DEBUG):
+        for name in sorted(glob(jobs['log'].rsplit('.',1)+'*')):
+            logger.debug('filename %s\n%s', name, open(name).read())
 
 
 def decimal1(s):
@@ -140,7 +146,8 @@ def main():
     parser.add_argument('--msg-size', type=int, default=100, help='message size in bytes')
     parser.add_argument('--delay', type=decimal1, default=0, help='delay in seconds')
     parser.add_argument('--scratch', type=mkpath, default='/scratch/dschultz/queue-benchmarks', help='scratch location')
-    parser.add_argument('--venv', default=None, help='(optional) venv location for jobs')
+    parser.add_argument('--venv', help='(optional) venv location for jobs')
+    parser.add_argument('--time-limit', type=int, default=-1, help='(optional) time limit before killing jobs')
     parser.add_argument('--loglevel', default='info', help='log level')
     args = vars(parser.parse_args())
 
@@ -181,7 +188,7 @@ def main():
     })
 
     job_info = create_jobs(**args)
-    monitor_jobs(job_info, total, client=client)
+    monitor_jobs(job_info, total, args['time_limit'], client=client)
 
 
 if __name__ == '__main__':
