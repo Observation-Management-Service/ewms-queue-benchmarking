@@ -113,9 +113,10 @@ def monitor_jobs(jobs, total_messages=100, time_limit=-1, client=None):
 
     if time_limit != -1 and time.time()-start >= time_limit:
         if logger.isEnabledFor(logging.DEBUG):
-            for name in sorted(glob(jobs['log'].rsplit('.',1)+'*')):
+            for name in sorted(glob(jobs['log'].rsplit('.',1)[0]+'*')):
                 logger.debug('filename %s\n%s', name, open(name).read())
         raise Exception('hit time limit')
+
 
 def decimal1(s):
     try:
