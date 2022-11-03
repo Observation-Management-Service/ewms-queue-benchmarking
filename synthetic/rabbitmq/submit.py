@@ -174,7 +174,7 @@ def main():
         'name': queue_name,
         'pubs': pubs,
         'workers': workers,
-        'messages-per-pub': args['msgs-per-pub'],
+        'messages-per-pub': args['msgs_per_pub'],
         'messages-size': msg_size,
         'delay': delay,
         'expected-messages': total,
