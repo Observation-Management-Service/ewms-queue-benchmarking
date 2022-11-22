@@ -50,6 +50,10 @@ jobs:
         ports:
         - 9200:9200
         options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 5
+      mongo:
+        image: bitnami/mongodb:4
+        ports:
+        - 27017:27017
     env:
       CI_TEST: "true"
       PYTHONUNBUFFERED: "1"
@@ -80,6 +84,10 @@ jobs:
         ports:
         - 5672:5672
         - 15672:15672
+      mongo:
+        image: bitnami/mongodb:4
+        ports:
+        - 27017:27017
       elasticsearch:
         image: bitnami/elasticsearch:7
         ports:
