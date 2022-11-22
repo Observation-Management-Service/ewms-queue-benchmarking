@@ -3,7 +3,7 @@ import logging
 
 from wipac_dev_tools import from_environment
 
-from .server import create_server
+from .server import Server
 
 # handle logging
 setlevel = {
@@ -26,9 +26,15 @@ logformat = '%(asctime)s %(levelname)s %(name)s %(module)s:%(lineno)s - %(messag
 
 logging.basicConfig(format=logformat, level=setlevel[config['LOG_LEVEL'].upper()])
 
+
 # start server
-s = create_server()
-try:
-    asyncio.get_event_loop().run_forever()
-finally:
-    asyncio.run(s.stop())
+async def main():
+    s = Server()
+    s.start()
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await s.stop()
+
+
+asyncio.run(main())
