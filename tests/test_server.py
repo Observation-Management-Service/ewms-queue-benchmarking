@@ -71,7 +71,7 @@ async def mongo_clear():
 @pytest_asyncio.fixture
 async def server(monkeypatch, port, es_clear, mongo_clear):
     monkeypatch.setenv('PORT', str(port))
-    monkeypatch.setenv('ES_TIMEOUT', str(.1))
+    monkeypatch.setenv('ES_TIMEOUT', str(1))
 
     s = Server()
     await s.start()
