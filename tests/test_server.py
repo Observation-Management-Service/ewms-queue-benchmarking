@@ -5,13 +5,14 @@ import os
 
 import elasticsearch
 from elasticsearch import AsyncElasticsearch
+import motor.motor_asyncio
 import pytest
 import pytest_asyncio
 from rest_tools.client import RestClient
 import requests.exceptions
 from wipac_dev_tools import from_environment
 
-from benchmark_server.server import create_server
+from benchmark_server.server import Server
 
 
 @pytest.fixture
@@ -50,15 +51,38 @@ async def es_clear():
         await es.close()
 
 @pytest_asyncio.fixture
-async def server(monkeypatch, port, es_clear):
-    monkeypatch.setenv('PORT', str(port))
+async def mongo_clear():
+    default_config = {
+        'DB_URL': 'mongodb://localhost/es_benchmarks',
+    }
+    config = from_environment(default_config)
+    db_url, db_name = config['DB_URL'].rsplit('/', 1)
+    client = motor.motor_asyncio.AsyncIOMotorClient(db_url)
+    db = client[db_name]
 
-    s = create_server()
+    try:
+        await db.benchmarks.drop()
+        await db.clients.drop()
+        yield
+    finally:
+        await db.benchmarks.drop()
+        await db.clients.drop()
+
+@pytest_asyncio.fixture
+async def server(monkeypatch, port, es_clear, mongo_clear):
+    monkeypatch.setenv('PORT', str(port))
+    monkeypatch.setenv('ES_TIMEOUT', str(1))
+
+    s = Server()
+    await s.start()
+
     def client(timeout=10):
         return RestClient(f'http://localhost:{port}', timeout=timeout, retries=0)
 
-    yield client
-    await s.stop()
+    try:
+        yield client
+    finally:
+        await s.stop()
 
 
 async def test_bad_route(server):

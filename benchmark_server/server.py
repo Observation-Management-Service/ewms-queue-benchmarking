@@ -1,14 +1,16 @@
 """
 Server for queue management
 """
+import asyncio
 from datetime import datetime
 import logging
 import os
 import string
 
-import elasticsearch
-from elasticsearch import AsyncElasticsearch, Elasticsearch
-from elasticsearch.helpers import async_scan
+from elasticsearch import AsyncElasticsearch
+import elasticsearch.exceptions
+import pymongo.errors
+import motor.motor_asyncio
 from rest_tools.server import RestServer, RestHandler, RestHandlerSetup
 from rest_tools.server.handler import keycloak_role_auth, catch_error
 from tornado.escape import json_decode
@@ -37,19 +39,60 @@ class Error(RequestHandler):
 
 
 class APIBase(RestHandler):
-    def initialize(self, es_client=None, **kwargs):
+    def initialize(self, db=None, es_client=None, **kwargs):
         super().initialize(**kwargs)
+        self.db = db
         self.es = es_client
+
+    async def create_es_entry(self, benchmark, entry_id, entry_type, messages=0):
+        doc = {
+            '@timestamp': datetime.utcnow().isoformat(),
+            'benchmark': benchmark,
+            'id': entry_id,
+            'type': entry_type,
+            'messages': messages,
+        }
+        await self.es.index(index='benchmark-'+benchmark, document=doc)
+
+
+async def sum_msgs(db, benchmark, ret=None):
+    if not ret:
+        ret = await db.benchmarks.find_one({'name': benchmark}, projection={'_id': False})
+
+    if ret:
+        # sum messages
+        pub_msgs = 0
+        worker_msgs = 0
+        pipeline = [{'$match': {'benchmark': benchmark}}, {'$group': {'_id': '$type', 'total': {'$sum': '$messages'}}}]
+        async for row in db.clients.aggregate(pipeline):
+            if row['_id'] == 'pub':
+                pub_msgs = row['total']
+            elif row['_id'] == 'worker':
+                worker_msgs = row['total']
+
+        if pub_msgs < ret['pub-messages']:
+            logging.debug('pub-messages decreased! %d < %d', pub_msgs, ret.get('pub-messages', 0))
+            raise HTTPError(500, reason='invalid number of pub messages')
+        if worker_msgs < ret['worker-messages']:
+            logging.debug('worker-messages decreased! %d < %d', worker_msgs, ret.get('worker-messages', 0))
+            raise HTTPError(500, reason='invalid number of pub messages')
+
+        if ret['pub-messages'] != pub_msgs or ret['worker-messages'] != worker_msgs:
+            update = {'pub-messages': pub_msgs, 'worker-messages': worker_msgs}
+            ret.update(update)
+            await db.benchmarks.update_one({'name': benchmark}, {'$set': update})
+
+    return ret
 
 
 class MultiBenchmarks(APIBase):
     @service_account_auth(roles=[AUTH_SERVICE_ACCOUNT])
     async def post(self):
-        name = self.get_argument('name')
-        if (not name) or not VALID_ID.issuperset(name):
+        benchmark = self.get_argument('name')
+        if (not benchmark) or not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
         doc = {
-            'name': name,
+            'name': benchmark,
             'created': datetime.utcnow().isoformat(),
             'pubs': 0,
             'pub-messages': 0,
@@ -58,10 +101,13 @@ class MultiBenchmarks(APIBase):
             'worker-messages': 0,
         }
         doc.update(json_decode(self.request.body))
-        ret = await self.es.index(index='benchmarks', id=name, document=doc)
-        logging.info('es index ret: %r', ret)
+        try:
+            await self.db.benchmarks.insert_one(doc)
+        except pymongo.errors.DuplicateKeyError:
+            raise HTTPError(409, reason='already existing benchmark')
+        logging.info('create benchmark: %r', doc)
 
-        self.write({'id': name})
+        self.write({'id': benchmark})
 
 
 class Benchmarks(APIBase):
@@ -69,42 +115,22 @@ class Benchmarks(APIBase):
     async def get(self, benchmark):
         if not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
-        try:
-            ret = await self.es.get_source(index='benchmarks', id=benchmark)
-        except elasticsearch.NotFoundError:
+
+        ret = await sum_msgs(self.db, benchmark)
+        if not ret:
             raise HTTPError(404)
-        ret = dict(ret)
-
-        # sum messages
-        pub_msgs = 0
-        worker_msgs = 0
-        try:
-            await self.es.indices.refresh(index='benchmark-'+benchmark)
-        except elasticsearch.NotFoundError:
-            pass
-        else:
-            async for ret2 in async_scan(client=self.es, query={'query': {'match_all': {}}}, index='benchmark-'+benchmark):
-                doc = ret2['_source']
-                logging.debug('doc: %r', doc)
-                if doc['type'] == 'pub':
-                    pub_msgs += doc['messages']
-                else:
-                    worker_msgs += doc['messages']
-
-        if pub_msgs < ret.get('pub-messages', 0):
-            logging.debug('pub-messages decreased! %d < %d', pub_msgs, ret.get('pub-messages', 0))
-            raise HTTPError(500, reason='invalid number of pub messages')
-        if worker_msgs < ret.get('worker-messages', 0):
-            logging.debug('worker-messages decreased! %d < %d', worker_msgs, ret.get('worker-messages', 0))
-            raise HTTPError(500, reason='invalid number of pub messages')
-        ret['pub-messages'] = pub_msgs
-        ret['worker-messages'] = worker_msgs
-
-        # update benchmark doc
-        doc = {k:v for k,v in ret.items() if not k.startswith('_')}
-        await self.es.index(index='benchmarks', id=benchmark, document=doc)
 
         self.write(ret)
+
+    @service_account_auth(roles=[AUTH_SERVICE_ACCOUNT])
+    async def delete(self, benchmark):
+        if not VALID_ID.issuperset(benchmark):
+            raise HTTPError(400, reason='invalid benchmark name')
+
+        await self.db.benchmarks.delete_one({'name': benchmark})
+        await self.db.clients.delete_many({'benchmark': benchmark})
+
+        self.write({})
 
 
 class MultiPubs(APIBase):
@@ -112,24 +138,27 @@ class MultiPubs(APIBase):
     async def post(self, benchmark):
         if not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
-        try:
-            await self.es.get_source(index='benchmarks', id=benchmark)
-        except elasticsearch.NotFoundError:
+        ret = await self.db.benchmarks.count_documents({'name': benchmark})
+        if not ret:
             raise HTTPError(404)
 
         pub_id = self.get_argument('id')
         if not VALID_ID.issuperset(pub_id):
             raise HTTPError(400, reason='invalid pub id')
 
+        now = datetime.utcnow().isoformat()
         doc = {
             'id': pub_id,
+            'benchmark': benchmark,
             'type': 'pub',
             'messages': 0,
             'delay': self.get_argument('delay', 0., type=float),
-            'created': datetime.utcnow().isoformat(),
-            'updated': datetime.utcnow().isoformat(),
+            'created': now,
+            'updated': now,
         }
-        await self.es.index(index='benchmark-'+benchmark, id=pub_id, document=doc)
+        await self.db.clients.insert_one(doc)
+
+        await self.create_es_entry(benchmark, pub_id, 'pub', 0)
 
 
 class Pubs(APIBase):
@@ -139,9 +168,8 @@ class Pubs(APIBase):
             raise HTTPError(400, reason='invalid benchmark name')
         if not VALID_ID.issuperset(pub_id):
             raise HTTPError(400, reason='invalid pub id')
-        try:
-            ret = await self.es.get_source(index='benchmarks', id=benchmark)
-        except elasticsearch.NotFoundError:
+        ret = await self.db.benchmarks.find_one({'name': benchmark}, projection={'_id': False})
+        if not ret:
             raise HTTPError(404)
 
         delay = self.get_argument('delay', 0., type=float)
@@ -163,14 +191,11 @@ class Pubs(APIBase):
             logging.info(f'{benchmark} {pub_id} - shrink delay')
             delay = max(0., delay / 2 - 1)
 
-        doc = {
-            'id': pub_id,
-            'type': 'pub',
-            'messages': self.get_argument('messages', 0, type=int),
-            'delay': delay,
-            'updated': datetime.utcnow().isoformat(),
-        }
-        await self.es.index(index='benchmark-'+benchmark, id=pub_id, document=doc)
+        msgs = self.get_argument('messages', 0, type=int)
+        ret = await self.db.clients.update_one({'id': pub_id}, {'$set': {'messages': msgs, 'delay': delay}})
+        if ret.matched_count < 1:
+            raise HTTPError(404)
+        await self.create_es_entry(benchmark, pub_id, 'pub', msgs)
 
         self.write({'delay': delay})
 
@@ -180,24 +205,27 @@ class MultiWorkers(APIBase):
     async def post(self, benchmark):
         if not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
-        try:
-            await self.es.get_source(index='benchmarks', id=benchmark)
-        except elasticsearch.NotFoundError:
+        ret = await self.db.benchmarks.count_documents({'name': benchmark})
+        if not ret:
             raise HTTPError(404)
 
         worker_id = self.get_argument('id')
         if not VALID_ID.issuperset(worker_id):
             raise HTTPError(400, reason='invalid worker id')
 
+        now = datetime.utcnow().isoformat()
         doc = {
             'id': worker_id,
+            'benchmark': benchmark,
             'type': 'worker',
             'messages': 0,
             'delay': self.get_argument('delay', 0., type=float),
-            'created': datetime.utcnow().isoformat(),
-            'updated': datetime.utcnow().isoformat(),
+            'created': now,
+            'updated': now,
         }
-        await self.es.index(index='benchmark-'+benchmark, id=worker_id, document=doc)
+        await self.db.clients.insert_one(doc)
+
+        await self.create_es_entry(benchmark, worker_id, 'worker', 0)
 
 
 class Workers(APIBase):
@@ -207,19 +235,16 @@ class Workers(APIBase):
             raise HTTPError(400, reason='invalid benchmark name')
         if not VALID_ID.issuperset(worker_id):
             raise HTTPError(400, reason='invalid worker id')
-        try:
-            await self.es.get_source(index='benchmarks', id=benchmark)
-        except elasticsearch.NotFoundError:
+        ret = await self.db.benchmarks.count_documents({'name': benchmark})
+        if not ret:
             raise HTTPError(404)
 
-        doc = {
-            'id': worker_id,
-            'type': 'worker',
-            'messages': self.get_argument('messages', 0, type=int),
-            'delay': self.get_argument('delay', 0., type=float),
-            'updated': datetime.utcnow().isoformat(),
-        }
-        await self.es.index(index='benchmark-'+benchmark, id=worker_id, document=doc)
+        msgs = self.get_argument('messages', 0, type=int)
+        delay = self.get_argument('delay', 0., type=float)
+        ret = await self.db.clients.update_one({'id': worker_id}, {'$set': {'messages': msgs, 'delay': delay}})
+        if ret.matched_count < 1:
+            raise HTTPError(404)
+        await self.create_es_entry(benchmark, worker_id, 'worker', msgs)
 
         self.write({})
 
@@ -228,15 +253,15 @@ class Health(APIBase):
     @catch_error
     async def get(self):
         try:
-            health = await self.es.cluster.health(index='benchmarks')
+            health = await self.es.cluster.health()
             if health['status'] == 'red':
                 raise HTTPError(503, reason='ES down')
-            count = await self.es.count(index='benchmarks')
-        except elasticsearch.NotFoundError:
-            raise HTTPError(500)
+        except elasticsearch.exceptions.ConnectionTimeout:
+            raise HTTPError(503, reason='ES down')
+        count = await self.db.benchmarks.estimated_document_count()
         logging.debug('output: %r %r', health, count)
         self.write({
-            'benchmarks': count['count'],
+            'benchmarks': count,
             'index-status': health['status'],
         })
 
@@ -251,7 +276,9 @@ class Server:
             'DEBUG': False,
             'OPENID_URL': '',
             'OPENID_AUDIENCE': '',
+            'DB_URL': 'mongodb://localhost/es_benchmarks',
             'ES_ADDRESS': 'http://localhost:9200',
+            'ES_TIMEOUT': 10.,
         }
         config = from_environment(default_config)
 
@@ -268,9 +295,17 @@ class Server:
             })
 
         kwargs = RestHandlerSetup(rest_config)
-        self._setup_es(config['ES_ADDRESS'])
-        self.es_client = AsyncElasticsearch(config['ES_ADDRESS'])
+
+        logging.info(f'DB: {config["DB_URL"]}')
+        db_url, db_name = config['DB_URL'].rsplit('/', 1)
+        db = motor.motor_asyncio.AsyncIOMotorClient(db_url)
+        logging.info(f'DB name: {db_name}')
+        self.db = db[db_name]
+        kwargs['db'] = self.db
+
+        self.es_client = AsyncElasticsearch(config['ES_ADDRESS'], request_timeout=config['ES_TIMEOUT'])
         kwargs['es_client'] = self.es_client
+        self.rest_kwargs = kwargs
 
         server = RestServer(static_path=static_path, template_path=static_path, debug=config['DEBUG'])
         server.add_route('/benchmarks', MultiBenchmarks, kwargs)
@@ -286,17 +321,45 @@ class Server:
 
         self.server = server
 
-    def _setup_es(self, es_address):
-        es = Elasticsearch(es_address)
-        try:
-            es.cat.indices(index='benchmarks', format='json')
-        except elasticsearch.NotFoundError:
-            es.indices.create(index='benchmarks')
+        self.background_task = None
+
+    async def start(self):
+        indexes = await self.db.benchmarks.index_information()
+        if 'name' not in indexes:
+            logging.info('DB: creating index benchmarks:name')
+            await self.db.benchmarks.create_index('name', unique=True, name='name')
+
+        indexes = await self.db.clients.index_information()
+        if 'benchmark' not in indexes:
+            logging.info('DB: creating index clients:benchmark')
+            await self.db.clients.create_index('benchmark', name='benchmark')
+        if 'id' not in indexes:
+            logging.info('DB: creating index clients:id')
+            await self.db.clients.create_index('id', unique=True, name='id')
+
+        # recurring benchmark msg summing
+        if self.background_task is None:
+            self.background_task = asyncio.create_task(self.run_background_task())
+
+    async def run_background_task(self):
+        while True:
+            try:
+                async for row in self.db.benchmarks.find({}, projection={'_id': False}):
+                    exp = row['expected-messages']
+                    if exp >= row['pub-messages'] and exp >= row['worker-messages']:
+                        continue
+                    await sum_msgs(self.db, row['name'], ret=row)
+            except Exception:
+                pass
+            await asyncio.sleep(1)
 
     async def stop(self):
+        if self.background_task:
+            self.background_task.cancel()
+            try:
+                await self.background_task
+            except asyncio.CancelledError:
+                pass
+            self.background_task = None
         await self.server.stop()
         await self.es_client.close()
-
-
-def create_server():
-    return Server()
