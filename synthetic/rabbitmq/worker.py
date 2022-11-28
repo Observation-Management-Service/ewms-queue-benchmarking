@@ -4,6 +4,7 @@ from functools import partial
 import logging
 from multiprocessing import Process
 from multiprocessing import Queue as mpQueue
+import time
 from uuid import uuid4
 
 from mqclient import Queue
@@ -13,17 +14,23 @@ from rest_tools.client import RestClient
 async def worker(work_queue: Queue, delay: float, batch_size: float) -> None:
     """Demo example worker."""
     msgs_received = 0
+    latency = 0.
     async with work_queue.open_sub() as stream:
         async for data in stream:
             uid = data['uuid']
+            lat = time.time() - data['time']
             msg_size = len(data['data'])
-            logging.warning(f'recv {uid} with size {msg_size}')
+            logging.warning(f'recv {uid} with size {msg_size} and latency {lat}')
             await asyncio.sleep(delay)
             logging.warning(f'complete {uid} with size {msg_size}')
             msgs_received += 1
+            latency += lat
             if msgs_received >= batch_size:
                 break
-    return msgs_received
+    return {
+        'messages': msgs_received,
+        'latency': latency,
+    }
 
 
 def worker_wrapper(workq, msg_return, *args, **kwargs):
@@ -39,8 +46,9 @@ class MyRestClient:
         self._rc = RestClient(address, token)
         self._rc.request_seq('POST', f'/benchmarks/{queue_name}/workers', {'id': self.uid, 'delay': self.delay})
 
-    async def send(self, msgs:int):
-        ret = await self._rc.request('PUT', f'/benchmarks/{self.queue_name}/workers/{self.uid}', {'messages': msgs, 'delay': self.delay})
+    async def send(self, data):
+        data['delay'] = self.delay
+        ret = await self._rc.request('PUT', f'/benchmarks/{self.queue_name}/workers/{self.uid}', data)
         if ret.get('quit'):
             raise StopIteration()
         self.delay = ret.get('delay', self.delay)
@@ -75,9 +83,14 @@ async def main():
     if args.server_address:
         rest_client = MyRestClient(args.server_address, args.server_access_token, args.queue_name, args.delay)
 
-    msgs = 0
+    total_msgs = 0
+    total_latency = 0.
+    total_duration = 0.
     try:
-        while args.num_msgs == 0 or msgs < args.num_msgs:
+        while args.num_msgs == 0 or total_msgs < args.num_msgs:
+            msgs = 0
+            latency = 0
+            start = time.time()
             if args.parallel > 1:
                 ret = mpQueue()
                 processes = [Process(target=worker_wrapper, args=(workq, ret, args.delay, args.batch_size)) for _ in range(args.parallel)]
@@ -86,13 +99,26 @@ async def main():
                 for p in processes:
                     p.join()
                 while not ret.empty():
-                    msgs += ret.get_nowait()
+                    ret2 = ret.get_nowait()
+                    msgs += ret2['messages']
+                    latency += ret2['latency']
             else:
                 ret = await worker(workq(), args.delay, args.batch_size)
-                msgs += ret
-            logging.info('num messages: %d', msgs)
+                msgs = ret['messages']
+                latency = ret['latency']
+            total_msgs += msgs
+            total_latency += latency
+            duration = time.time()-start
+            total_duration += duration
+            throughput = msgs/duration
+            total_throughput = total_msgs/total_duration
+            logging.info('num messages: %d', total_msgs)
             if rest_client:
-                await rest_client.send(msgs)
+                await rest_client.send({
+                    "messages": msgs, "latency": latency,
+                    "total_messages": total_msgs, "total_latency": total_latency,
+                    'throughput': throughput, 'total_throughput': total_throughput,
+                })
     except StopIteration:
         logging.info('condor QUIT received')
 

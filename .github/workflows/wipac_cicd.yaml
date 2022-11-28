@@ -49,7 +49,9 @@ jobs:
         image: bitnami/elasticsearch:7
         ports:
         - 9200:9200
-        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 5
+        env:
+          ES_SETTING_INGEST_GEOIP_DOWNLOADER_ENABLED: "false"
+        options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 10
       mongo:
         image: bitnami/mongodb:4
         ports:
@@ -92,6 +94,8 @@ jobs:
         image: bitnami/elasticsearch:7
         ports:
         - 9200:9200
+        env:
+          ES_SETTING_INGEST_GEOIP_DOWNLOADER_ENABLED: "false"
         options: --health-cmd "curl -XGET 'localhost:9200/_cat/health?v&pretty'|grep green" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       CI_TEST: "true"

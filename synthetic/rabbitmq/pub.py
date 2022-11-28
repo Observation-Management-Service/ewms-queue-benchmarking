@@ -5,6 +5,7 @@ import logging
 from multiprocessing import Process
 import random
 import string
+import time
 from uuid import uuid4
 
 from mqclient import Queue
@@ -17,7 +18,8 @@ async def pub(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) -> 
         for _ in range(batch_size):
             data = ''.join(random.choices(string.ascii_letters, k=msg_size))
             uid = uuid4().hex
-            await p.send({'uuid': uid, 'data': data})
+            now = time.time()
+            await p.send({'uuid': uid, 'time': now, 'data': data})
             logging.warning(f'pub {uid} with size {msg_size}')
 
 
@@ -33,8 +35,9 @@ class MyRestClient:
         self._rc = RestClient(address, token)
         self._rc.request_seq('POST', f'/benchmarks/{queue_name}/pubs', {'id': self.uid, 'delay': self.delay})
 
-    async def send(self, msgs:int):
-        ret = await self._rc.request('PUT', f'/benchmarks/{self.queue_name}/pubs/{self.uid}', {'messages': msgs, 'delay': self.delay})
+    async def send(self, data):
+        data['delay'] = self.delay
+        ret = await self._rc.request('PUT', f'/benchmarks/{self.queue_name}/pubs/{self.uid}', data)
         if ret.get('quit'):
             raise StopIteration()
         self.delay = ret.get('delay', self.delay)
@@ -64,21 +67,29 @@ async def main():
         rest_client = MyRestClient(args.server_address, args.server_access_token, args.queue_name)
 
     try:
+        total_msgs = 0
         msgs = 0
-        while args.num_msgs == 0 or msgs < args.num_msgs:
+        total_duration = 0
+        while args.num_msgs == 0 or total_msgs < args.num_msgs:
+            start = time.time()
             if args.parallel > 1:
                 processes = [Process(target=pub_wrapper, args=(workq, args.msg_size, args.batch_size)) for _ in range(args.parallel)]
                 for p in processes:
                     p.start()
                 for p in processes:
                     p.join()
-                msgs += args.batch_size*args.parallel
+                msgs = args.batch_size*args.parallel
             else:
                 await pub(workq(), args.msg_size, args.batch_size)
-                msgs += args.batch_size
-            logging.info('num messages: %d', msgs)
+                msgs = args.batch_size
+            total_msgs += msgs
+            duration = time.time()-start
+            total_duration += duration
+            throughput = msgs/duration
+            total_throughput = total_msgs/total_duration
+            logging.info('num messages: %d', total_msgs)
             if rest_client:
-                await rest_client.send(msgs)
+                await rest_client.send({'messages': msgs, 'total_messages': total_msgs, 'throughput': throughput, 'total_throughput': total_throughput})
     except StopIteration:
         logging.info('QUIT received')
     logging.info('done publishing, exiting')

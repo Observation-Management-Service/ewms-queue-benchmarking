@@ -130,22 +130,22 @@ async def test_benchmark_pub(server):
     client = server()
     await client.request('POST', '/benchmarks', {'name': 'foo-bar'})
     await client.request('POST', '/benchmarks/foo-bar/pubs', {'id': '1234'})
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1234', {'messages': 1})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1234', {'total_messages': 1})
     assert ret['delay'] == 0
 
 async def test_benchmark_worker(server):
     client = server()
     await client.request('POST', '/benchmarks', {'name': 'foo-bar'})
     await client.request('POST', '/benchmarks/foo-bar/workers', {'id': '1234'})
-    await client.request('PUT', '/benchmarks/foo-bar/workers/1234', {'messages': 1})
+    await client.request('PUT', '/benchmarks/foo-bar/workers/1234', {'total_messages': 1})
 
 async def test_benchmark_totals(server):
     client = server()
     await client.request('POST', '/benchmarks', {'name': 'foo-bar'})
     await client.request('POST', '/benchmarks/foo-bar/pubs', {'id': '1'})
-    await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 2})
+    await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 2})
     await client.request('POST', '/benchmarks/foo-bar/workers', {'id': '2'})
-    await client.request('PUT', '/benchmarks/foo-bar/workers/2', {'messages': 1})
+    await client.request('PUT', '/benchmarks/foo-bar/workers/2', {'total_messages': 1})
     
     ret = await client.request('GET', '/benchmarks/foo-bar')
     assert ret['pub-messages'] == 2
@@ -155,56 +155,56 @@ async def test_backoff(server):
     client = server()
     await client.request('POST', '/benchmarks', {'name': 'foo-bar', 'expected-messages': 10000000})
     await client.request('POST', '/benchmarks/foo-bar/pubs', {'id': '1'})
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5000})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5000})
     assert ret['delay'] == 0
     await client.request('POST', '/benchmarks/foo-bar/pubs', {'id': '2'})
-    await client.request('PUT', '/benchmarks/foo-bar/pubs/2', {'messages': 5000})
+    await client.request('PUT', '/benchmarks/foo-bar/pubs/2', {'total_messages': 5000})
     assert ret['delay'] == 0
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001, 'delay': 0.})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5001, 'delay': 0.})
     assert ret['delay'] == 0  # cached result
 
     # update cached values
     ret = await client.request('GET', '/benchmarks/foo-bar')
     logging.debug('benchmark status: %r', ret)
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5001})
     assert ret['delay'] == 1
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001, 'delay': 3.5})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5001, 'delay': 3.5})
     assert ret['delay'] == 4.5  # should go up by 1
 
     # add a worker
     await client.request('POST', '/benchmarks/foo-bar/workers', {'id': '3'})
-    await client.request('PUT', '/benchmarks/foo-bar/workers/3', {'messages': 1})
+    await client.request('PUT', '/benchmarks/foo-bar/workers/3', {'total_messages': 1})
     await client.request('GET', '/benchmarks/foo-bar')
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001, 'delay': 3.5})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5001, 'delay': 3.5})
     assert ret['delay'] == 3.5  # should stay constant
 
-    await client.request('PUT', '/benchmarks/foo-bar/workers/3', {'messages': 2})
+    await client.request('PUT', '/benchmarks/foo-bar/workers/3', {'total_messages': 2})
     await client.request('GET', '/benchmarks/foo-bar')
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001, 'delay': 3.5})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5001, 'delay': 3.5})
     assert ret['delay'] == 3.5/2-1  # should go down sharply
 
-    await client.request('PUT', '/benchmarks/foo-bar/workers/3', {'messages': 10000})
+    await client.request('PUT', '/benchmarks/foo-bar/workers/3', {'total_messages': 10000})
     await client.request('GET', '/benchmarks/foo-bar')
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001, 'delay': 3.5})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5001, 'delay': 3.5})
     assert ret['delay'] == 0  # should emergency queue
 
-    await client.request('PUT', '/benchmarks/foo-bar/pubs/2', {'messages': 150000})
+    await client.request('PUT', '/benchmarks/foo-bar/pubs/2', {'total_messages': 150000})
     ret = await client.request('GET', '/benchmarks/foo-bar')
     logging.debug('benchmark status: %r', ret)
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 5001, 'delay': 3.5})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 5001, 'delay': 3.5})
     assert ret['delay'] == 3.5+100  # should sharply rise
 
 async def test_backoff_10pct(server):
     client = server()
     await client.request('POST', '/benchmarks', {'name': 'foo-bar', 'expected-messages': 10000})
     await client.request('POST', '/benchmarks/foo-bar/pubs', {'id': '1'})
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 900})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 900})
     assert ret['delay'] == 0
     await client.request('POST', '/benchmarks/foo-bar/pubs', {'id': '2'})
-    await client.request('PUT', '/benchmarks/foo-bar/pubs/2', {'messages': 101})
+    await client.request('PUT', '/benchmarks/foo-bar/pubs/2', {'total_messages': 101})
     ret = await client.request('GET', '/benchmarks/foo-bar')
     logging.debug('benchmark status: %r', ret)
-    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'messages': 101, 'delay': 3.5})
+    ret = await client.request('PUT', '/benchmarks/foo-bar/pubs/1', {'total_messages': 101, 'delay': 3.5})
     assert ret['delay'] == 3.5*2+1  # should be a mid rise
 
     

@@ -150,6 +150,7 @@ def main():
     parser.add_argument('--scratch', type=mkpath, default='/scratch/dschultz/queue-benchmarks', help='scratch location')
     parser.add_argument('--venv', help='(optional) venv location for jobs')
     parser.add_argument('--time-limit', type=int, default=-1, help='(optional) time limit before killing jobs')
+    parser.add_argument('--override', action='store_true', help='override previous benchmark')
     parser.add_argument('--loglevel', default='info', help='log level')
     args = vars(parser.parse_args())
 
@@ -179,6 +180,8 @@ def main():
         logging.warning('Running without auth!')
         client = RestClient(args['server'])
 
+    if args['override']:
+        client.request_seq('DELETE', f'/benchmarks/{queue_name}')
     client.request_seq('POST', '/benchmarks', {
         'name': queue_name,
         'pubs': pubs,
