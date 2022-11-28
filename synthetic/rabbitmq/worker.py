@@ -95,7 +95,7 @@ async def main():
                 for p in processes:
                     p.join()
                 while not ret.empty():
-                    ret2 += ret.get_nowait()
+                    ret2 = ret.get_nowait()
                     msgs += ret2['messages']
                     latency += ret2['latency']
                 latency /= args.batch_size
