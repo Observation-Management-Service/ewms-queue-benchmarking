@@ -13,7 +13,7 @@ logger = logging.getLogger('submitter')
 
 
 def get_schedd():
-    coll_query = htcondor.Collector('localhost').locateAll(htcondor.DaemonTypes.Schedd)
+    coll_query = htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd)
     for schedd_ad in coll_query:
         schedd = htcondor.Schedd(schedd_ad)
         break
