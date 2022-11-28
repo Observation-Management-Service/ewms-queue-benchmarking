@@ -44,14 +44,18 @@ class APIBase(RestHandler):
         self.db = db
         self.es = es_client
 
-    async def create_es_entry(self, benchmark, entry_id, entry_type, messages=0, latency=0.):
+    async def create_es_entry(self, benchmark, entry_id, entry_type, messages=0, total_messages=0, latency=0., total_latency=0., throughput=0., total_throughput=0.):
         doc = {
             '@timestamp': datetime.utcnow().isoformat(),
             'benchmark': benchmark,
             'id': entry_id,
             'type': entry_type,
             'messages': messages,
+            'total_messages': total_messages,
             'latency': latency,
+            'total_latency': total_latency,
+            'throughput': throughput,
+            'total_throughput': total_throughput,
         }
         await self.es.index(index='benchmark-'+benchmark, document=doc)
 
@@ -159,7 +163,7 @@ class MultiPubs(APIBase):
         }
         await self.db.clients.insert_one(doc)
 
-        await self.create_es_entry(benchmark, pub_id, 'pub', 0)
+        await self.create_es_entry(benchmark, pub_id, 'pub')
 
 
 class Pubs(APIBase):
@@ -192,11 +196,15 @@ class Pubs(APIBase):
             logging.info(f'{benchmark} {pub_id} - shrink delay')
             delay = max(0., delay / 2 - 1)
 
-        msgs = self.get_argument('messages', 0, type=int)
-        ret = await self.db.clients.update_one({'id': pub_id}, {'$set': {'messages': msgs, 'delay': delay}})
+        total_msgs = self.get_argument('total_messages', 0, type=int)
+        ret = await self.db.clients.update_one({'id': pub_id}, {'$set': {'messages': total_msgs, 'delay': delay}})
         if ret.matched_count < 1:
             raise HTTPError(404)
-        await self.create_es_entry(benchmark, pub_id, 'pub', msgs)
+        msgs = self.get_argument('messages', 0, type=int)
+        throughput = self.get_argument('throughput', 0., type=float)
+        total_throughput = self.get_argument('total_throughput', 0., type=float)
+        await self.create_es_entry(benchmark, pub_id, 'pub', messages=msgs, total_messages=total_msgs,
+                                   throughput=throughput, total_throughput=total_throughput)
 
         self.write({'delay': delay})
 
@@ -226,7 +234,7 @@ class MultiWorkers(APIBase):
         }
         await self.db.clients.insert_one(doc)
 
-        await self.create_es_entry(benchmark, worker_id, 'worker', 0)
+        await self.create_es_entry(benchmark, worker_id, 'worker')
 
 
 class Workers(APIBase):
@@ -240,13 +248,19 @@ class Workers(APIBase):
         if not ret:
             raise HTTPError(404)
 
-        msgs = self.get_argument('messages', 0, type=int)
-        latency = self.get_argument('latency', 0., type=float)
+        total_msgs = self.get_argument('total_messages', 0, type=int)
         delay = self.get_argument('delay', 0., type=float)
-        ret = await self.db.clients.update_one({'id': worker_id}, {'$set': {'messages': msgs, 'delay': delay}})
+        ret = await self.db.clients.update_one({'id': worker_id}, {'$set': {'messages': total_msgs, 'delay': delay}})
         if ret.matched_count < 1:
             raise HTTPError(404)
-        await self.create_es_entry(benchmark, worker_id, 'worker', msgs, latency=latency)
+        msgs = self.get_argument('messages', 0, type=int)
+        latency = self.get_argument('latency', 0., type=float)
+        total_latency = self.get_argument('total_latency', 0., type=float)
+        throughput = self.get_argument('throughput', 0., type=float)
+        total_throughput = self.get_argument('total_throughput', 0., type=float)
+        await self.create_es_entry(benchmark, worker_id, 'worker', messages=msgs, total_messages=total_msgs,
+                                   latency=latency, total_latency=total_latency,
+                                   throughput=throughput, total_throughput=total_throughput)
 
         self.write({})
 
