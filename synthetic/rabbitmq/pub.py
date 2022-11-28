@@ -5,6 +5,7 @@ import logging
 from multiprocessing import Process
 import random
 import string
+import time
 from uuid import uuid4
 
 from mqclient import Queue
@@ -17,7 +18,8 @@ async def pub(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) -> 
         for _ in range(batch_size):
             data = ''.join(random.choices(string.ascii_letters, k=msg_size))
             uid = uuid4().hex
-            await p.send({'uuid': uid, 'data': data})
+            now = time.time()
+            await p.send({'uuid': uid, 'time': now, 'data': data})
             logging.warning(f'pub {uid} with size {msg_size}')
 
 

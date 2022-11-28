@@ -44,13 +44,14 @@ class APIBase(RestHandler):
         self.db = db
         self.es = es_client
 
-    async def create_es_entry(self, benchmark, entry_id, entry_type, messages=0):
+    async def create_es_entry(self, benchmark, entry_id, entry_type, messages=0, latency=0.):
         doc = {
             '@timestamp': datetime.utcnow().isoformat(),
             'benchmark': benchmark,
             'id': entry_id,
             'type': entry_type,
             'messages': messages,
+            'latency': latency,
         }
         await self.es.index(index='benchmark-'+benchmark, document=doc)
 
@@ -240,11 +241,12 @@ class Workers(APIBase):
             raise HTTPError(404)
 
         msgs = self.get_argument('messages', 0, type=int)
+        latency = self.get_argument('latency', 0., type=float)
         delay = self.get_argument('delay', 0., type=float)
         ret = await self.db.clients.update_one({'id': worker_id}, {'$set': {'messages': msgs, 'delay': delay}})
         if ret.matched_count < 1:
             raise HTTPError(404)
-        await self.create_es_entry(benchmark, worker_id, 'worker', msgs)
+        await self.create_es_entry(benchmark, worker_id, 'worker', msgs, latency=latency)
 
         self.write({})
 
