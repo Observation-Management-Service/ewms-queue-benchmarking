@@ -50,7 +50,7 @@ class APIBase(RestHandler):
         doc = {
             '@timestamp': datetime.utcnow().isoformat(),
             'benchmark': benchmark_data['name'],
-            'type': benchmark_data['type'],
+            'queue-type': benchmark_data['type'],
             'msg-size': benchmark_data['message-size'],
             'num-pubs': benchmark_data['pubs'],
             'num-workers': benchmark_data['workers'],

@@ -23,7 +23,7 @@ async def pub(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) -> 
             uid = uuid4().hex
             now = time.time()
             await p.send({'uuid': uid, 'time': now, 'data': data})
-            latency += time.time - now
+            latency += time.time() - now
             messages += 1
             logging.warning(f'pub {uid} with size {msg_size} and latency {latency}')
     return {
