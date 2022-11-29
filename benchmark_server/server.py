@@ -61,7 +61,7 @@ class APIBase(RestHandler):
             'throughput': throughput,
             'total_throughput': total_throughput,
         }
-        await self.es.index(index='benchmark-'+benchmark, document=doc)
+        await self.es.index(index='benchmarks', document=doc)
 
 
 async def sum_msgs(db, benchmark, ret=None):
@@ -189,7 +189,7 @@ class Pubs(APIBase):
         if extra_pub_msgs > 100000:
             logging.info(f'{benchmark} {pub_id} - 100k messages extra, hard backoff')
             delay += 100.
-        elif ret['expected-messages'] > 0 and extra_pub_msgs * 100. / max(1, ret['expected-messages']) > 10:
+        elif benchmark_data['expected-messages'] > 0 and extra_pub_msgs * 100. / max(1, benchmark_data['expected-messages']) > 10:
             logging.info(f'{benchmark} {pub_id} - 10% of total messages are buffered, backoff')
             delay = delay * 2 + 1.
         elif extra_pub_msgs > 10000:
