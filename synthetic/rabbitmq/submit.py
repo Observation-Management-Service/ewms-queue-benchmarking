@@ -106,10 +106,9 @@ def monitor_jobs(jobs, total_messages=100, time_limit=-1, client=None):
                 logger.info('job/server error', exc_info=True)
 
     finally:
-        logger.warning('removing jobs')
+        logger.warning(f'removing jobs {pub_cluster} {worker_cluster}')
         schedd = get_schedd()
-        schedd.act(htcondor.JobAction.Remove, f'{pub_cluster}')
-        schedd.act(htcondor.JobAction.Remove, f'{worker_cluster}')
+        schedd.act(htcondor.JobAction.Remove, [f'{pub_cluster}', f'{worker_cluster}'], reason='cleanup')
 
     if time_limit != -1 and time.time()-start >= time_limit:
         if logger.isEnabledFor(logging.DEBUG):

@@ -30,7 +30,7 @@ logging.basicConfig(format=logformat, level=setlevel[config['LOG_LEVEL'].upper()
 # start server
 async def main():
     s = Server()
-    s.start()
+    await s.start()
     try:
         await asyncio.Event().wait()
     finally:
