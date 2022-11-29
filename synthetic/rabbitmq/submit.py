@@ -163,6 +163,9 @@ def main():
 
     pubs = args['pubs']
     workers = args['workers']
+    if args['parallel']:
+        pubs *= 10
+        workers *= 10
     msg_size = args['msg_size']
     delay = args['delay']
     queue_name = f'rabbitmq-p{pubs}-w{workers}-m{msg_size}-d{delay}'
