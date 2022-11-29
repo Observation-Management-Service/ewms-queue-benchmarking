@@ -128,12 +128,14 @@ async def main():
             if rest_client:
                 await rest_client.send({
                     "messages": msgs, "total_messages": total_msgs,
-                    "queue_time": queue_time/msgs, "total_queue_time": total_queue_time/total_msgs,
-                    "latency": latency/msgs, "total_latency": total_latency/total_msgs,
+                    "queue_time": queue_time/msgs if msgs else 0.,
+                    "total_queue_time": total_queue_time/total_msgs if total_msgs else 0.,
+                    "latency": latency/msgs if msgs else 0.,
+                    "total_latency": total_latency/total_msgs if total_msgs else 0.,
                     'throughput': throughput, 'total_throughput': total_throughput,
                 })
     except StopIteration:
-        logging.info('condor QUIT received')
+        logging.info('QUIT received')
 
     logging.info('done working, exiting')
 
