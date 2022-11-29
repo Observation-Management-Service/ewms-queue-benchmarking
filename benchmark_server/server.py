@@ -108,6 +108,7 @@ class MultiBenchmarks(APIBase):
             'expected-messages': 0,
             'workers': 0,
             'worker-messages': 0,
+            'delay': 0,
             'messages-per-pub': 0,
             'message-size': 0,
         }
