@@ -3,6 +3,7 @@ import asyncio
 from functools import partial
 import logging
 from multiprocessing import Process
+from multiprocessing import Queue as mpQueue
 import random
 import string
 import time
@@ -14,17 +15,26 @@ from rest_tools.client import RestClient
 
 async def pub(work_queue: Queue, msg_size: int = 100, batch_size: int = 100) -> None:
     """Send messages to queue"""
+    messages = 0
+    latency = 0.
     async with work_queue.open_pub() as p:
         for _ in range(batch_size):
             data = ''.join(random.choices(string.ascii_letters, k=msg_size))
             uid = uuid4().hex
             now = time.time()
             await p.send({'uuid': uid, 'time': now, 'data': data})
-            logging.warning(f'pub {uid} with size {msg_size}')
+            latency += time.time() - now
+            messages += 1
+            logging.warning(f'pub {uid} with size {msg_size} and latency {latency}')
+    return {
+        'messages': messages,
+        'latency': latency,
+    }
 
 
-def pub_wrapper(workq, *args, **kwargs):
-    asyncio.run(pub(workq(), *args, **kwargs))
+def pub_wrapper(workq, msg_return, *args, **kwargs):
+    ret = asyncio.run(pub(workq(), *args, **kwargs))
+    msg_return.put(ret)
 
 
 class MyRestClient:
@@ -68,28 +78,40 @@ async def main():
 
     try:
         total_msgs = 0
-        msgs = 0
+        total_latency = 0.
         total_duration = 0
         while args.num_msgs == 0 or total_msgs < args.num_msgs:
+            msgs = 0
+            latency = 0.
             start = time.time()
             if args.parallel > 1:
-                processes = [Process(target=pub_wrapper, args=(workq, args.msg_size, args.batch_size)) for _ in range(args.parallel)]
+                ret = mpQueue()
+                processes = [Process(target=pub_wrapper, args=(workq, ret, args.msg_size, args.batch_size)) for _ in range(args.parallel)]
                 for p in processes:
                     p.start()
                 for p in processes:
                     p.join()
-                msgs = args.batch_size*args.parallel
+                while not ret.empty():
+                    ret2 = ret.get_nowait()
+                    msgs += ret2['messages']
+                    latency += ret2['latency']
             else:
-                await pub(workq(), args.msg_size, args.batch_size)
-                msgs = args.batch_size
+                ret = await pub(workq(), args.msg_size, args.batch_size)
+                msgs = ret['messages']
+                latency = ret['latency']
             total_msgs += msgs
+            total_latency += latency
             duration = time.time()-start
             total_duration += duration
             throughput = msgs/duration
             total_throughput = total_msgs/total_duration
             logging.info('num messages: %d', total_msgs)
             if rest_client:
-                await rest_client.send({'messages': msgs, 'total_messages': total_msgs, 'throughput': throughput, 'total_throughput': total_throughput})
+                await rest_client.send({
+                    "messages": msgs, "total_messages": total_msgs,
+                    "latency": latency/msgs, "total_latency": total_latency/total_msgs,
+                    'throughput': throughput, 'total_throughput': total_throughput,
+                })
     except StopIteration:
         logging.info('QUIT received')
     logging.info('done publishing, exiting')

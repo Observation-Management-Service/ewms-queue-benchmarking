@@ -14,21 +14,28 @@ from rest_tools.client import RestClient
 async def worker(work_queue: Queue, delay: float, batch_size: float) -> None:
     """Demo example worker."""
     msgs_received = 0
+    queue_time = 0.
     latency = 0.
     async with work_queue.open_sub() as stream:
+        lt_start = time.time()
         async for data in stream:
             uid = data['uuid']
-            lat = time.time() - data['time']
+            now = time.time()
+            qt = now - data['time']
+            lat = now - lt_start
             msg_size = len(data['data'])
-            logging.warning(f'recv {uid} with size {msg_size} and latency {lat}')
+            logging.warning(f'recv {uid} with size {msg_size}, qt {qt}, and latency {lat}')
             await asyncio.sleep(delay)
             logging.warning(f'complete {uid} with size {msg_size}')
             msgs_received += 1
+            queue_time += qt
             latency += lat
             if msgs_received >= batch_size:
                 break
+            lt_start = time.time()
     return {
         'messages': msgs_received,
+        'queue_time': queue_time,
         'latency': latency,
     }
 
@@ -84,12 +91,14 @@ async def main():
         rest_client = MyRestClient(args.server_address, args.server_access_token, args.queue_name, args.delay)
 
     total_msgs = 0
+    total_queue_time = 0.
     total_latency = 0.
     total_duration = 0.
     try:
         while args.num_msgs == 0 or total_msgs < args.num_msgs:
             msgs = 0
-            latency = 0
+            queue_time = 0.
+            latency = 0.
             start = time.time()
             if args.parallel > 1:
                 ret = mpQueue()
@@ -101,12 +110,15 @@ async def main():
                 while not ret.empty():
                     ret2 = ret.get_nowait()
                     msgs += ret2['messages']
+                    queue_time += ret2['queue_time']
                     latency += ret2['latency']
             else:
                 ret = await worker(workq(), args.delay, args.batch_size)
                 msgs = ret['messages']
+                queue_time = ret['queue_time']
                 latency = ret['latency']
             total_msgs += msgs
+            total_queue_time += queue_time
             total_latency += latency
             duration = time.time()-start
             total_duration += duration
@@ -116,6 +128,7 @@ async def main():
             if rest_client:
                 await rest_client.send({
                     "messages": msgs, "total_messages": total_msgs,
+                    "queue_time": queue_time/msgs, "total_queue_time": total_queue_time/total_msgs,
                     "latency": latency/msgs, "total_latency": total_latency/total_msgs,
                     'throughput': throughput, 'total_throughput': total_throughput,
                 })
