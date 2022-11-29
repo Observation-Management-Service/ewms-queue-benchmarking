@@ -224,7 +224,7 @@ class Pubs(APIBase):
                                    throughput=throughput, total_throughput=total_throughput)
 
         if benchmark_data['pub-messages'] >= benchmark_data['expected-messages']:
-            self.write({'quit': True})
+            self.write({'quit': True, 'delay': 0})
         else:
             self.write({'delay': delay})
 
