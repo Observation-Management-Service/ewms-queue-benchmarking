@@ -96,8 +96,7 @@ async def main():
                     msgs += ret2['messages']
                     latency += ret2['latency']
             else:
-                await pub(workq(), args.msg_size, args.batch_size)
-                ret = args.batch_size
+                ret = await pub(workq(), args.msg_size, args.batch_size)
                 msgs = ret['messages']
                 latency = ret['latency']
             total_msgs += msgs
