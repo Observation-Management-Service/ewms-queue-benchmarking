@@ -223,7 +223,10 @@ class Pubs(APIBase):
                                    latency=latency, total_latency=total_latency,
                                    throughput=throughput, total_throughput=total_throughput)
 
-        self.write({'delay': delay})
+        if benchmark_data['pub-messages'] >= benchmark_data['expected-messages']:
+            self.write({'quit': True, 'delay': 0})
+        else:
+            self.write({'delay': delay})
 
 
 class MultiWorkers(APIBase):
@@ -283,7 +286,10 @@ class Workers(APIBase):
                                    latency=latency, total_latency=total_latency,
                                    throughput=throughput, total_throughput=total_throughput)
 
-        self.write({})
+        if benchmark_data['worker-messages'] >= benchmark_data['expected-messages']:
+            self.write({'quit': True})
+        else:
+            self.write({})
 
 
 class Health(APIBase):
