@@ -115,7 +115,7 @@ async def main():
             else:
                 ret = await worker(workq(), args.delay, args.batch_size)
                 msgs = ret['messages']
-                queue_time = ret2['queue_time']
+                queue_time = ret['queue_time']
                 latency = ret['latency']
             total_msgs += msgs
             total_queue_time += queue_time
