@@ -41,7 +41,7 @@ def create_jobs(queue_address, queue_name, server=None, access_token=None, pubs=
 
     schedd = get_schedd()
 
-    pub_job_count = max(1, pubs//10) if parallel else pubs
+    pub_job_count = pubs
     pub_jobs = schedd.submit(htcondor.Submit({
         'executable': str(env_script),
         'output': f'{log_pub}.$(ProcId).out',
@@ -55,7 +55,7 @@ def create_jobs(queue_address, queue_name, server=None, access_token=None, pubs=
         'arguments': f'python pub.py --server-address {server} {access} --num-msgs {msgs_per_pub} --msg-size {msg_size} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=pub_job_count)
 
-    worker_job_count = max(1, workers//10) if parallel else workers
+    worker_job_count = workers
     worker_jobs = schedd.submit(htcondor.Submit({
         'executable': str(env_script),
         'output': f'{log_worker}.$(ProcId).out',
