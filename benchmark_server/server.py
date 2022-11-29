@@ -44,10 +44,13 @@ class APIBase(RestHandler):
         self.db = db
         self.es = es_client
 
-    async def create_es_entry(self, benchmark_data, entry_id, entry_type, messages=0, total_messages=0, latency=0., total_latency=0., throughput=0., total_throughput=0.):
+    async def create_es_entry(self, benchmark_data, entry_id, entry_type, messages=0, total_messages=0,
+                              queue_time=0., total_queue_time=0., latency=0., total_latency=0.,
+                              throughput=0., total_throughput=0.):
         doc = {
             '@timestamp': datetime.utcnow().isoformat(),
             'benchmark': benchmark_data['name'],
+            'type': benchmark_data['type'],
             'msg-size': benchmark_data['message-size'],
             'num-pubs': benchmark_data['pubs'],
             'num-workers': benchmark_data['workers'],
@@ -56,6 +59,8 @@ class APIBase(RestHandler):
             'type': entry_type,
             'messages': messages,
             'total_messages': total_messages,
+            'queue_time': queue_time,
+            'total_queue_time': total_queue_time,
             'latency': latency,
             'total_latency': total_latency,
             'throughput': throughput,
@@ -102,6 +107,7 @@ class MultiBenchmarks(APIBase):
             raise HTTPError(400, reason='invalid benchmark name')
         doc = {
             'name': benchmark,
+            'type': benchmark.split('-')[0],
             'created': datetime.utcnow().isoformat(),
             'pubs': 0,
             'pub-messages': 0,
@@ -208,10 +214,13 @@ class Pubs(APIBase):
         if ret.matched_count < 1:
             raise HTTPError(404)
         msgs = self.get_argument('messages', 0, type=int)
+        latency = self.get_argument('latency', 0., type=float)
+        total_latency = self.get_argument('total_latency', 0., type=float)
         throughput = self.get_argument('throughput', 0., type=float)
         total_throughput = self.get_argument('total_throughput', 0., type=float)
         await self.create_es_entry(benchmark_data, pub_id, 'pub',
                                    messages=msgs, total_messages=total_msgs,
+                                   latency=latency, total_latency=total_latency,
                                    throughput=throughput, total_throughput=total_throughput)
 
         self.write({'delay': delay})
@@ -262,12 +271,15 @@ class Workers(APIBase):
         if ret.matched_count < 1:
             raise HTTPError(404)
         msgs = self.get_argument('messages', 0, type=int)
+        queue_time = self.get_argument('queue_time', 0., type=float)
+        total_queue_time = self.get_argument('total_queue_time', 0., type=float)
         latency = self.get_argument('latency', 0., type=float)
         total_latency = self.get_argument('total_latency', 0., type=float)
         throughput = self.get_argument('throughput', 0., type=float)
         total_throughput = self.get_argument('total_throughput', 0., type=float)
         await self.create_es_entry(benchmark_data, worker_id, 'worker',
                                    messages=msgs, total_messages=total_msgs,
+                                   queue_time=queue_time, total_queue_time=total_queue_time,
                                    latency=latency, total_latency=total_latency,
                                    throughput=throughput, total_throughput=total_throughput)
 
