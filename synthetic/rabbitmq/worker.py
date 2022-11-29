@@ -115,8 +115,8 @@ async def main():
             logging.info('num messages: %d', total_msgs)
             if rest_client:
                 await rest_client.send({
-                    "messages": msgs, "latency": latency,
-                    "total_messages": total_msgs, "total_latency": total_latency,
+                    "messages": msgs, "total_messages": total_msgs,
+                    "latency": latency/msgs, "total_latency": total_latency/total_msgs,
                     'throughput': throughput, 'total_throughput': total_throughput,
                 })
     except StopIteration:

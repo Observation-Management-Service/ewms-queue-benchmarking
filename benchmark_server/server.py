@@ -44,10 +44,14 @@ class APIBase(RestHandler):
         self.db = db
         self.es = es_client
 
-    async def create_es_entry(self, benchmark, entry_id, entry_type, messages=0, total_messages=0, latency=0., total_latency=0., throughput=0., total_throughput=0.):
+    async def create_es_entry(self, benchmark_data, entry_id, entry_type, messages=0, total_messages=0, latency=0., total_latency=0., throughput=0., total_throughput=0.):
         doc = {
             '@timestamp': datetime.utcnow().isoformat(),
-            'benchmark': benchmark,
+            'benchmark': benchmark_data['name'],
+            'msg-size': benchmark_data['message-size'],
+            'num-pubs': benchmark_data['pubs'],
+            'num-workers': benchmark_data['workers'],
+            'delay': benchmark_data['delay'],
             'id': entry_id,
             'type': entry_type,
             'messages': messages,
@@ -57,7 +61,7 @@ class APIBase(RestHandler):
             'throughput': throughput,
             'total_throughput': total_throughput,
         }
-        await self.es.index(index='benchmark-'+benchmark, document=doc)
+        await self.es.index(index='benchmarks', document=doc)
 
 
 async def sum_msgs(db, benchmark, ret=None):
@@ -104,6 +108,9 @@ class MultiBenchmarks(APIBase):
             'expected-messages': 0,
             'workers': 0,
             'worker-messages': 0,
+            'delay': 0,
+            'messages-per-pub': 0,
+            'message-size': 0,
         }
         doc.update(json_decode(self.request.body))
         try:
@@ -143,8 +150,8 @@ class MultiPubs(APIBase):
     async def post(self, benchmark):
         if not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
-        ret = await self.db.benchmarks.count_documents({'name': benchmark})
-        if not ret:
+        benchmark_data = await self.db.benchmarks.find_one({'name': benchmark})
+        if not benchmark_data:
             raise HTTPError(404)
 
         pub_id = self.get_argument('id')
@@ -163,7 +170,7 @@ class MultiPubs(APIBase):
         }
         await self.db.clients.insert_one(doc)
 
-        await self.create_es_entry(benchmark, pub_id, 'pub')
+        await self.create_es_entry(benchmark_data, pub_id, 'pub')
 
 
 class Pubs(APIBase):
@@ -173,17 +180,17 @@ class Pubs(APIBase):
             raise HTTPError(400, reason='invalid benchmark name')
         if not VALID_ID.issuperset(pub_id):
             raise HTTPError(400, reason='invalid pub id')
-        ret = await self.db.benchmarks.find_one({'name': benchmark}, projection={'_id': False})
-        if not ret:
+        benchmark_data = await self.db.benchmarks.find_one({'name': benchmark}, projection={'_id': False})
+        if not benchmark_data:
             raise HTTPError(404)
 
         delay = self.get_argument('delay', 0., type=float)
 
-        extra_pub_msgs = ret['pub-messages']-ret['worker-messages']
+        extra_pub_msgs = benchmark_data['pub-messages']-benchmark_data['worker-messages']
         if extra_pub_msgs > 100000:
             logging.info(f'{benchmark} {pub_id} - 100k messages extra, hard backoff')
             delay += 100.
-        elif ret['expected-messages'] > 0 and extra_pub_msgs * 100. / max(1, ret['expected-messages']) > 10:
+        elif benchmark_data['expected-messages'] > 0 and extra_pub_msgs * 100. / max(1, benchmark_data['expected-messages']) > 10:
             logging.info(f'{benchmark} {pub_id} - 10% of total messages are buffered, backoff')
             delay = delay * 2 + 1.
         elif extra_pub_msgs > 10000:
@@ -203,7 +210,8 @@ class Pubs(APIBase):
         msgs = self.get_argument('messages', 0, type=int)
         throughput = self.get_argument('throughput', 0., type=float)
         total_throughput = self.get_argument('total_throughput', 0., type=float)
-        await self.create_es_entry(benchmark, pub_id, 'pub', messages=msgs, total_messages=total_msgs,
+        await self.create_es_entry(benchmark_data, pub_id, 'pub',
+                                   messages=msgs, total_messages=total_msgs,
                                    throughput=throughput, total_throughput=total_throughput)
 
         self.write({'delay': delay})
@@ -214,8 +222,8 @@ class MultiWorkers(APIBase):
     async def post(self, benchmark):
         if not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
-        ret = await self.db.benchmarks.count_documents({'name': benchmark})
-        if not ret:
+        benchmark_data = await self.db.benchmarks.find_one({'name': benchmark})
+        if not benchmark_data:
             raise HTTPError(404)
 
         worker_id = self.get_argument('id')
@@ -234,7 +242,7 @@ class MultiWorkers(APIBase):
         }
         await self.db.clients.insert_one(doc)
 
-        await self.create_es_entry(benchmark, worker_id, 'worker')
+        await self.create_es_entry(benchmark_data, worker_id, 'worker')
 
 
 class Workers(APIBase):
@@ -244,8 +252,8 @@ class Workers(APIBase):
             raise HTTPError(400, reason='invalid benchmark name')
         if not VALID_ID.issuperset(worker_id):
             raise HTTPError(400, reason='invalid worker id')
-        ret = await self.db.benchmarks.count_documents({'name': benchmark})
-        if not ret:
+        benchmark_data = await self.db.benchmarks.find_one({'name': benchmark})
+        if not benchmark_data:
             raise HTTPError(404)
 
         total_msgs = self.get_argument('total_messages', 0, type=int)
@@ -258,7 +266,8 @@ class Workers(APIBase):
         total_latency = self.get_argument('total_latency', 0., type=float)
         throughput = self.get_argument('throughput', 0., type=float)
         total_throughput = self.get_argument('total_throughput', 0., type=float)
-        await self.create_es_entry(benchmark, worker_id, 'worker', messages=msgs, total_messages=total_msgs,
+        await self.create_es_entry(benchmark_data, worker_id, 'worker',
+                                   messages=msgs, total_messages=total_msgs,
                                    latency=latency, total_latency=total_latency,
                                    throughput=throughput, total_throughput=total_throughput)
 
