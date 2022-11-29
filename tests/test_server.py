@@ -120,6 +120,14 @@ async def test_benchmarks(server):
     assert ret['pub-messages'] == 0
     assert ret['worker-messages'] == 0
 
+async def test_benchmarks_double_post(server):
+    client = server()
+    await client.request('POST', '/benchmarks', {'name': 'foo-bar'})
+    await client.request('GET', '/benchmarks/foo-bar')
+    with pytest.raises(requests.exceptions.HTTPError) as exc_info:
+        await client.request('POST', '/benchmarks', {'name': 'foo-bar'})
+    assert exc_info.value.response.status_code == 409
+
 async def test_benchmark_pub_before_exists(server):
     client = server()
     with pytest.raises(requests.exceptions.HTTPError) as exc_info:
