@@ -149,7 +149,7 @@ class MultiPubs(APIBase):
     async def post(self, benchmark):
         if not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
-        benchmark_data = await self.db.benchmarks.count_documents({'name': benchmark})
+        benchmark_data = await self.db.benchmarks.find_one({'name': benchmark})
         if not benchmark_data:
             raise HTTPError(404)
 
@@ -221,7 +221,7 @@ class MultiWorkers(APIBase):
     async def post(self, benchmark):
         if not VALID_ID.issuperset(benchmark):
             raise HTTPError(400, reason='invalid benchmark name')
-        benchmark_data = await self.db.benchmarks.count_documents({'name': benchmark})
+        benchmark_data = await self.db.benchmarks.find_one({'name': benchmark})
         if not benchmark_data:
             raise HTTPError(404)
 
@@ -251,7 +251,7 @@ class Workers(APIBase):
             raise HTTPError(400, reason='invalid benchmark name')
         if not VALID_ID.issuperset(worker_id):
             raise HTTPError(400, reason='invalid worker id')
-        benchmark_data = await self.db.benchmarks.count_documents({'name': benchmark})
+        benchmark_data = await self.db.benchmarks.find_one({'name': benchmark})
         if not benchmark_data:
             raise HTTPError(404)
 
