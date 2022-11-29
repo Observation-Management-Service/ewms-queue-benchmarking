@@ -66,6 +66,7 @@ def create_jobs(queue_address, queue_name, server=None, access_token=None, pubs=
         'transfer_output_files': '',
         'request_cpus': '1',
         'request_memory': '1GB',
+        'priority': '1',
         'arguments': f'python worker.py --server-address {server} {access} --delay {delay} --parallel {10 if parallel else 1} {queue_address} {queue_name}',
     }), count=worker_job_count)
 
@@ -109,6 +110,7 @@ def monitor_jobs(jobs, total_messages=100, time_limit=-1, client=None):
         logger.warning(f'removing jobs {pub_cluster} {worker_cluster}')
         schedd = get_schedd()
         schedd.act(htcondor.JobAction.Remove, [f'{pub_cluster}', f'{worker_cluster}'], reason='cleanup')
+        time.sleep(1)
 
     if time_limit != -1 and time.time()-start >= time_limit:
         if logger.isEnabledFor(logging.DEBUG):
@@ -186,7 +188,7 @@ def main():
         'pubs': pubs,
         'workers': workers,
         'messages-per-pub': args['msgs_per_pub'],
-        'messages-size': msg_size,
+        'message-size': msg_size,
         'delay': delay,
         'expected-messages': total,
     })
