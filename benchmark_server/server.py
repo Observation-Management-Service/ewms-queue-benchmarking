@@ -149,7 +149,7 @@ class Benchmarks(APIBase):
         await self.db.clients.delete_many({'benchmark': benchmark})
 
         try:
-            await self.es.delete_by_query(index='benchmarks', query={"match": {"benchmark": benchmark}}, wait_for_completion=True)
+            await self.es.delete_by_query(index='benchmarks', query={"term": {"benchmark": benchmark}}, wait_for_completion=True)
         except elasticsearch.exceptions.NotFoundError:
             pass
 
