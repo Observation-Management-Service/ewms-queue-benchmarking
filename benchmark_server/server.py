@@ -7,7 +7,6 @@ import logging
 import os
 import string
 
-import elasticsearch
 from elasticsearch import AsyncElasticsearch
 import elasticsearch.exceptions
 import pymongo.errors
@@ -151,7 +150,7 @@ class Benchmarks(APIBase):
 
         try:
             await self.es.delete_by_query(index='benchmarks', query={"match": {"benchmark": benchmark}}, wait_for_completion=True)
-        except elasticsearch.NotFoundErr:
+        except elasticsearch.exceptions.NotFoundError:
             pass
 
         self.write({})
