@@ -99,7 +99,7 @@ async def sum_msgs(db, benchmark, ret=None):
     return ret
 
 
-async def sum_all_msgs(self, db):
+async def sum_all_msgs(db):
     async for row in db.benchmarks.find({}, projection={'_id': False}):
         exp = row['expected-messages']
         if exp >= row['pub-messages'] and exp >= row['worker-messages']:
