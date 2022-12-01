@@ -398,7 +398,7 @@ class Server:
 
         # recurring benchmark msg summing
         if self.background_task is None and self.run_background_tasks:
-            self.background_task = asyncio.create_task(self.run_background_task)
+            self.background_task = asyncio.create_task(self.run_background_task())
 
     async def run_background_task(self):
         while True:
