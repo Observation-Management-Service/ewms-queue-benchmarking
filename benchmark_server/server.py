@@ -99,6 +99,14 @@ async def sum_msgs(db, benchmark, ret=None):
     return ret
 
 
+async def sum_all_msgs(self, db):
+    async for row in db.benchmarks.find({}, projection={'_id': False}):
+        exp = row['expected-messages']
+        if exp >= row['pub-messages'] and exp >= row['worker-messages']:
+            continue
+        await sum_msgs(db, row['name'], ret=row)
+
+
 class MultiBenchmarks(APIBase):
     @service_account_auth(roles=[AUTH_SERVICE_ACCOUNT])
     async def post(self):
@@ -327,6 +335,7 @@ class Server:
             'DB_URL': 'mongodb://localhost/es_benchmarks',
             'ES_ADDRESS': 'http://localhost:9200',
             'ES_TIMEOUT': 10.,
+            'RUN_BACKGROUND_TASKS': True,
         }
         config = from_environment(default_config)
 
@@ -344,7 +353,8 @@ class Server:
 
         kwargs = RestHandlerSetup(rest_config)
 
-        logging.info(f'DB: {config["DB_URL"]}')
+        logging_url = config["DB_URL"].split('@')[-1] if '@' in config["DB_URL"] else config["DB_URL"]
+        logging.info(f'DB: {logging_url}')
         db_url, db_name = config['DB_URL'].rsplit('/', 1)
         db = motor.motor_asyncio.AsyncIOMotorClient(db_url)
         logging.info(f'DB name: {db_name}')
@@ -369,6 +379,7 @@ class Server:
 
         self.server = server
 
+        self.run_background_tasks = config['RUN_BACKGROUND_TASKS']
         self.background_task = None
 
     async def start(self):
@@ -386,17 +397,13 @@ class Server:
             await self.db.clients.create_index('id', unique=True, name='id')
 
         # recurring benchmark msg summing
-        if self.background_task is None:
-            self.background_task = asyncio.create_task(self.run_background_task())
+        if self.background_task is None and self.run_background_tasks:
+            self.background_task = asyncio.create_task(self.run_background_task)
 
     async def run_background_task(self):
         while True:
             try:
-                async for row in self.db.benchmarks.find({}, projection={'_id': False}):
-                    exp = row['expected-messages']
-                    if exp >= row['pub-messages'] and exp >= row['worker-messages']:
-                        continue
-                    await sum_msgs(self.db, row['name'], ret=row)
+                await sum_all_msgs(self.db)
             except Exception:
                 pass
             await asyncio.sleep(1)
