@@ -74,7 +74,7 @@ jobs:
   synthetic_rabbitmq:
     name: "Synthetic Tests with RabbitMQ"
     needs: [py-versions]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     services:
       rabbitmq:
         image: bitnami/rabbitmq:3.8
