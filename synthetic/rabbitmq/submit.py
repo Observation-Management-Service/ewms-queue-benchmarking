@@ -6,7 +6,7 @@ from pathlib import Path
 import time
 
 import htcondor
-from rest_tools.client import OpenIDRestClient, RestClient
+from rest_tools.client import ClientCredentialsAuth, RestClient
 
 
 logger = logging.getLogger('submitter')
@@ -173,7 +173,7 @@ def main():
     args['queue_name'] = queue_name
 
     if args['auth_url']:
-        client = OpenIDRestClient(
+        client = ClientCredentialsAuth(
             args['server'],
             args['auth_url'],
             args['auth_client_id'],
